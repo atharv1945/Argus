@@ -1,11 +1,11 @@
-# ARGUS Synthetic Security Dataset Summary
+# ARGUS Synthetic Security Dataset Summary (20-Field Expanded Spec)
 
 ## Dataset Overview
 
-- **Total Events**: `132,982`
-- **Date Range**: `2026-05-31 23:41:00 UTC` to `2026-06-21 19:50:00 UTC` (`21` days)
-- **Total Monitored Entities**: `400`
-- **Total Tracked Sessions**: `8,873`
+- **Total Events**: `139,789`
+- **Date Range**: `2026-05-31 23:22:00 UTC` to `2026-06-27 04:01:20 UTC` (`21` days)
+- **Total Monitored Entities**: `400` (Users, Service Accounts, Edge Devices)
+- **Total Tracked Sessions**: `9,476`
 - **Target Attack Ratio (Entities)**: `7.0%`
 
 ---
@@ -14,40 +14,52 @@
 
 | Class | Event Count | Percentage |
 | :--- | :--- | :--- |
-| **Normal Traffic (`is_malicious=False`)** | `132,570` | `99.69%` |
-| **Malicious Traffic (`is_malicious=True`)** | `412` | `0.31%` |
-| **Total** | `132,982` | `100.00%` |
+| **Normal Traffic (`is_malicious=False`)** | `139,387` | `99.71%` |
+| **Malicious Traffic (`is_malicious=True`)** | `402` | `0.29%` |
+| **Total** | `139,789` | `100.00%` |
 
 ---
 
-## Attack Vector Breakdown
+## Attack & Pattern Taxonomy Breakdown (8 Categories)
 
-| Attack Vector (`attack_type`) | Campaign Count (`attack_instance_id`) | Malicious Events | Description |
-| :--- | :--- | :--- | :--- |
-| `credential_misuse` | `6` | `48` | Off-hours sensitive cross-department resource access under valid user credentials |
-| `brute_force` | `6` | `207` | Burst of failed logons followed by 1 successful logon & unauthorized access |
-| `lateral_movement` | `6` | `92` | Rapid fan-out access across multiple foreign host devices & servers |
-| `impossible_travel` | `5` | `33` | Sequential logons under same entity ID from physically distant countries |
-| `device_spoofing` | `5` | `32` | Session initiated from an unrecognized, non-fingerprinted rogue device ID |
+| Attack / Pattern Category (`attack_type`) | Campaign Count (`attack_instance_id`) | Total Events | Ground Truth Label (`is_malicious`) | Description |
+| :--- | :---: | :---: | :---: | :--- |
+| `credential_misuse` | `5` | `34` | `True` | Off-hours sensitive cross-department resource access under valid user credentials |
+| `brute_force` | `5` | `108` | `True` | Burst of failed logons followed by 1 successful logon & unauthorized access |
+| `lateral_movement` | `5` | `40` | `True` | Rapid fan-out access across multiple foreign host devices & servers |
+| `impossible_travel` | `5` | `5` | `True` | Sequential logons under same entity ID from physically distant countries |
+| `device_spoofing` | `5` | `5` | `True` | Session initiated from an unrecognized, non-fingerprinted rogue device ID |
+| `credential_stuffing` | `5` | `130` | `True` | MANY entity IDs attempting auth from FEW shared attacker IPs with high failure rate |
+| `low_and_slow_exfiltration` | `5` | `80` | `True` | Gradual, small off-hours resource access building up incrementally over weeks |
+| `insider_drift` | `5` | `50` | **`False` (Benign)** | AMBIGUOUS EDGE CASE: Legitimate entity expanding privilege footprint (Benign FP bait) |
 
 ---
 
 ## Entity & Organizational Breakdown
 
+### By Entity Type
+| Entity Type | Count | Percentage |
+| :--- | :--- | :--- |
+| **user** | `339` | `84.8%` |
+| **service_account** | `43` | `10.8%` |
+| **edge_device** | `18` | `4.5%` |
+
+### By Department
 | Department | Entity Count | Percentage |
 | :--- | :--- | :--- |
-| **Engineering** | `125` | `31.2%` |
-| **Sales** | `82` | `20.5%` |
+| **Engineering** | `122` | `30.5%` |
+| **Sales** | `74` | `18.5%` |
 | **IT** | `60` | `15.0%` |
-| **Finance** | `56` | `14.0%` |
-| **HR** | `39` | `9.8%` |
-| **Executive** | `38` | `9.5%` |
+| **Finance** | `57` | `14.2%` |
+| **Executive** | `45` | `11.2%` |
+| **HR** | `42` | `10.5%` |
 
 ---
 
 ## Technical Validation Checklist
 
-- [x] **Schema Integrity**: All 16 fields present and strongly typed according to canonical specification.
-- [x] **Parquet Format**: Optimized columnar output ready for pandas, PyTorch, and GNN pipelines.
+- [x] **20-Field Expanded Schema Integrity**: All 20 canonical fields present and strongly typed.
+- [x] **Parquet Format**: Single monolithic columnar output ready for pandas, PyTorch, and GNN pipelines.
 - [x] **Reproducibility**: Seeded generator (`seed=42`) ensures deterministic reproduction.
-- [x] **Campaign Density Validation**: Every attack vector has >= 4 distinct campaign instances (range: 5-6 campaigns/vector).
+- [x] **Campaign Density Validation**: All 7 malicious attack vectors have >= 4 distinct campaign instances (5-6 campaigns/vector).
+- [x] **Label-Hiding Discipline**: `src/ingest/mask_labels.py` available for inference-time label masking.

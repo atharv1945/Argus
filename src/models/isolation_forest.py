@@ -1,16 +1,9 @@
 """
-ARGUS Phase 2 — Isolation Forest Detector
-==========================================
+ARGUS Phase 2 — Isolation Forest Detector (Retrained on 20-Field Schema)
+=========================================================================
 Trains an Isolation Forest on NORMAL-ONLY training session features as a
 cold-start, distribution-free anomaly baseline. Saves model weights and
 produces per-session anomaly scores.
-
-Architecture choice rationale:
-  Isolation Forest is the ideal cold-start signal because:
-  1. It trains on normal traffic only — no label dependency.
-  2. It produces raw continuous anomaly scores accessible to the Phase 3
-     fusion layer.
-  3. CPU-friendly with O(n * trees) inference.
 
 Usage:
     python src/models/isolation_forest.py
@@ -25,12 +18,11 @@ from sklearn.ensemble import IsolationForest
 from sklearn.metrics import (
     precision_score, recall_score, f1_score,
     average_precision_score, roc_auc_score,
-    classification_report,
 )
 from sklearn.preprocessing import RobustScaler
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Feature columns used for training
+# Feature columns (27 base features + rolling deviations + peer deviations = 81)
 # ─────────────────────────────────────────────────────────────────────────────
 
 BASE_FEATURES = [
@@ -39,6 +31,9 @@ BASE_FEATURES = [
     "distinct_resources", "distinct_resource_depts", "distinct_devices",
     "foreign_access_count", "bytes_total", "bytes_max", "bytes_mean",
     "distinct_countries", "distinct_ips", "off_hours_flag",
+    "cmd_seq_length", "cmd_risky_count", "cmd_risky_ratio",
+    "cmd_has_escalate", "cmd_has_delete", "cmd_has_export",
+    "cmd_entropy", "auth_risk", "entity_type_code", "fp_mismatch",
 ]
 
 DEV_FEATURES = [f"dev_{f}" for f in BASE_FEATURES]
@@ -54,7 +49,6 @@ def load_features(path: str = "data/processed/session_features.parquet") -> pd.D
 
 
 def prepare_X(sf: pd.DataFrame, feature_cols: list) -> np.ndarray:
-    """Fill NaN baselines (sessions without rolling history) with 0 (no deviation)."""
     X = sf[feature_cols].copy()
     X = X.fillna(0.0)
     return X.values.astype(np.float32)
@@ -67,7 +61,6 @@ def train_isolation_forest(
     contamination: float = 0.01,
     random_state: int = 42,
 ):
-    """Train on normal-only training sessions."""
     train_normal = sf[(sf["split"] == "train") & (~sf["is_malicious"])]
     print(f"  Training on {len(train_normal):,} normal training sessions.")
 
@@ -93,26 +86,14 @@ def score_all_sessions(
     scaler: RobustScaler,
     feature_cols: list,
 ) -> pd.Series:
-    """
-    Return anomaly scores for every session.
-    Isolation Forest decision_function returns:
-      - More negative = more anomalous
-    We negate so that higher score = more anomalous (consistent with other models).
-    """
     X = prepare_X(sf, feature_cols)
     X_scaled = scaler.transform(X)
     raw_scores = iforest.decision_function(X_scaled)
-    # Negate so high = anomalous
     anomaly_scores = -raw_scores
     return pd.Series(anomaly_scores, index=sf.index, name="iforest_score")
 
 
 def evaluate(sf: pd.DataFrame, threshold_percentile: float = 95.0) -> dict:
-    """
-    Evaluate on the held-out test split.
-    Threshold is set at the <threshold_percentile>-th percentile of scores
-    on normal training data (calibrated on training set).
-    """
     train_normal_scores = sf.loc[
         (sf["split"] == "train") & (~sf["is_malicious"]), "iforest_score"
     ]
@@ -130,34 +111,77 @@ def evaluate(sf: pd.DataFrame, threshold_percentile: float = 95.0) -> dict:
         "precision": float(precision_score(y_true, y_pred, zero_division=0)),
         "recall":    float(recall_score(y_true, y_pred, zero_division=0)),
         "f1":        float(f1_score(y_true, y_pred, zero_division=0)),
-        "pr_auc":    float(average_precision_score(y_true, y_score)),
+        "pr_auc":    float(average_precision_score(y_true, y_score)) if y_true.sum() > 0 else 0.0,
         "roc_auc":   float(roc_auc_score(y_true, y_score)) if y_true.sum() > 0 else 0.0,
         "threshold": float(threshold),
         "n_test_sessions": len(test_df),
         "n_malicious_test": int(y_true.sum()),
     }
 
-    # Per-attack-type breakdown
+    # ── Per-attack-type breakdown (Recall & PR-AUC vs normal) ──
     per_type = {}
-    for atk_type in test_df["attack_type"].unique():
+    for atk_type in sorted(test_df["attack_type"].unique()):
         if atk_type == "none":
             continue
-        mask = (test_df["attack_type"] == atk_type) | (test_df["attack_type"] == "none")
-        sub = test_df[mask]
+        sub_atk = test_df[test_df["attack_type"] == atk_type]
+        sub_norm = test_df[test_df["attack_type"] == "none"]
+        sub = pd.concat([sub_atk, sub_norm])
+
         yt = sub["is_malicious"].astype(int).values
-        yp = sub["pred"].values
         ys = sub["iforest_score"].values
+        yp = (ys >= threshold).astype(int)
+
         n_campaigns = test_df.loc[test_df["attack_type"] == atk_type, "attack_instance_id"].nunique()
+        is_benign_pattern = (atk_type == "insider_drift")
+
+        # Class-specific recall = TP_atk / N_atk
+        n_total_atk = len(sub_atk)
+        n_flagged_atk = int((sub_atk["iforest_score"] >= threshold).sum())
+        atk_recall = float(n_flagged_atk / max(n_total_atk, 1))
+
         per_type[atk_type] = {
-            "precision": float(precision_score(yt, yp, zero_division=0)),
-            "recall":    float(recall_score(yt, yp, zero_division=0)),
-            "f1":        float(f1_score(yt, yp, zero_division=0)),
-            "pr_auc":    float(average_precision_score(yt, ys)) if yt.sum() > 0 else 0.0,
-            "n_malicious_sessions": int((yt == 1).sum()),
+            "recall":               round(atk_recall, 4),
+            "pr_auc":               round(float(average_precision_score(yt, ys)), 4) if yt.sum() > 0 else 0.0,
+            "n_sessions_this_type": n_total_atk,
+            "n_flagged_sessions":   n_flagged_atk,
             "n_campaigns_in_test":  int(n_campaigns),
-            "note": "small-sample estimate (1-2 campaigns held out per type)"
+            "is_benign_edge_case":  is_benign_pattern,
+            "note": "BENIGN edge case (is_malicious=False). Model should NOT flag these." if is_benign_pattern else "recall & PR-AUC vs normal traffic"
         }
     results["per_attack_type"] = per_type
+
+    # ── Precision@top-k% alert budget ──
+    top_k_results = {}
+    for pct in [0.5, 1.0, 2.0]:
+        k = max(1, int(len(test_df) * pct / 100.0))
+        top_k_idx = test_df["iforest_score"].nlargest(k).index
+        top_k_df = test_df.loc[top_k_idx]
+        tp = int(top_k_df["is_malicious"].sum())
+        fp = k - tp
+        insider_drift_in_top_k = int((top_k_df["attack_type"] == "insider_drift").sum())
+
+        top_k_results[f"top_{pct}pct"] = {
+            "k": k,
+            "true_positives": tp,
+            "false_positives": fp,
+            "precision": round(tp / k, 4),
+            "insider_drift_flagged": insider_drift_in_top_k,
+            "note": f"Top {pct}% of test sessions by anomaly score ({k} sessions)"
+        }
+    results["precision_at_top_k"] = top_k_results
+
+    # ── Insider drift FP analysis ──
+    drift_test = test_df[test_df["attack_type"] == "insider_drift"]
+    drift_flagged = int((drift_test["iforest_score"] >= threshold).sum()) if len(drift_test) > 0 else 0
+    results["insider_drift_analysis"] = {
+        "total_drift_test_sessions": len(drift_test),
+        "drift_flagged_as_anomaly": drift_flagged,
+        "drift_false_positive_rate": round(drift_flagged / max(len(drift_test), 1), 4),
+        "drift_mean_score": float(drift_test["iforest_score"].mean()) if len(drift_test) > 0 else 0.0,
+        "normal_mean_score": float(test_df.loc[(test_df["attack_type"] == "none"), "iforest_score"].mean()),
+        "malicious_mean_score": float(test_df.loc[test_df["is_malicious"], "iforest_score"].mean()) if y_true.sum() > 0 else 0.0,
+        "note": "insider_drift sessions are BENIGN (is_malicious=False). Flagging them counts against precision."
+    }
 
     return results, threshold
 
@@ -179,7 +203,6 @@ def main():
     print("[*] Evaluating on test split...")
     results, threshold = evaluate(sf)
 
-    # ── Save model artifacts ──────────────────────────────────────────────────
     os.makedirs("src/models", exist_ok=True)
     model_path = "src/models/iforest_model.pkl"
     with open(model_path, "wb") as f:
@@ -187,25 +210,32 @@ def main():
                      "threshold": threshold}, f)
     print(f"[OK] Saved Isolation Forest model to {model_path}.")
 
-    # ── Save scored sessions for Phase 3 fusion ───────────────────────────────
     score_path = "data/processed/iforest_scores.parquet"
-    sf[["session_id", "entity_id", "split", "is_malicious", "attack_type",
+    sf[["session_id", "entity_id", "entity_type", "split", "is_malicious", "attack_type",
         "attack_instance_id", "session_start", "iforest_score"]].to_parquet(score_path, index=False)
     print(f"[OK] Saved per-session scores to {score_path}.")
 
-    # ── Save results JSON ─────────────────────────────────────────────────────
     results_path = "data/processed/iforest_results.json"
     with open(results_path, "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2)
     print(f"[OK] Saved evaluation results to {results_path}.")
 
-    # ── Print summary ─────────────────────────────────────────────────────────
     ov = results["overall"]
     print(f"\n--- Isolation Forest Test Results ---")
     print(f"  Overall  P={ov['precision']:.3f}  R={ov['recall']:.3f}  F1={ov['f1']:.3f}  PR-AUC={ov['pr_auc']:.3f}  ROC-AUC={ov['roc_auc']:.3f}")
-    print(f"\n  Per-attack-type (small-sample estimates):")
+    print(f"\n  Per-attack-type:")
     for atk, m in results["per_attack_type"].items():
-        print(f"    {atk:20s}  P={m['precision']:.3f}  R={m['recall']:.3f}  F1={m['f1']:.3f}  PR-AUC={m['pr_auc']:.3f}  n_malicious_sessions={m['n_malicious_sessions']}  n_campaigns={m['n_campaigns_in_test']}")
+        label = " (BENIGN)" if m.get("is_benign_edge_case") else ""
+        print(f"    {atk:30s}  Recall={m['recall']:.3f}  PR-AUC={m['pr_auc']:.3f}  sessions={m['n_sessions_this_type']}{label}")
+
+    print(f"\n  Precision@top-k% alert budget:")
+    for k, v in results["precision_at_top_k"].items():
+        print(f"    {k}: precision={v['precision']:.3f}  TP={v['true_positives']}  FP={v['false_positives']}  insider_drift_flagged={v['insider_drift_flagged']}  (k={v['k']})")
+
+    ida = results["insider_drift_analysis"]
+    print(f"\n  Insider drift FP analysis:")
+    print(f"    Total drift sessions in test: {ida['total_drift_test_sessions']}")
+    print(f"    Drift flagged as anomaly:     {ida['drift_flagged_as_anomaly']}  (FP rate: {ida['drift_false_positive_rate']:.3f})")
 
 
 if __name__ == "__main__":

@@ -1,27 +1,9 @@
 """
-ARGUS Phase 2 — Transformer Sequence Anomaly Detector
-======================================================
+ARGUS Phase 2 — Transformer Sequence Anomaly Detector (Retrained on 20-Field Schema)
+=====================================================================================
 Architecture: A small Transformer encoder over each entity's chronological
 session-feature sequence. The final session's representation is passed through
 an anomaly scoring head trained as binary classification (normal vs. malicious).
-
-Architecture choice rationale vs. autoencoder:
-  Binary classification (with labels) is chosen over a reconstruction-error
-  autoencoder because:
-  1. We DO have attack labels on training campaigns — supervised signal is
-     stronger than reconstruction for detecting novel patterns.
-  2. The training set imbalance can be handled with class weighting.
-  3. The raw output logit/probability is preserved as a continuous anomaly
-     score for Phase 3 fusion, matching the Isolation Forest score contract.
-
-Sequence construction:
-  - For each entity, sessions are ordered chronologically.
-  - We take a context window of the last SEQ_LEN sessions before each target.
-  - Target label = is_malicious of the LAST session in the window.
-
-Model size (CPU-constrained):
-  - d_model=32, nhead=4, num_encoder_layers=2, dim_feedforward=64
-  - Max training time target: < 30 minutes on CPU.
 
 Usage:
     python src/models/sequence_model.py
@@ -46,11 +28,11 @@ from sklearn.preprocessing import RobustScaler
 # Configuration
 # ─────────────────────────────────────────────────────────────────────────────
 
-SEQ_LEN         = 8       # Sliding window size (sessions preceding + including target)
-D_MODEL         = 32      # Transformer embedding dim
-N_HEADS         = 4       # Attention heads
-N_LAYERS        = 2       # Encoder layers
-DIM_FF          = 64      # Feedforward dim
+SEQ_LEN         = 8
+D_MODEL         = 32
+N_HEADS         = 4
+N_LAYERS        = 2
+DIM_FF          = 64
 DROPOUT         = 0.1
 BATCH_SIZE      = 128
 EPOCHS          = 20
@@ -64,6 +46,9 @@ BASE_FEATURES = [
     "distinct_resources", "distinct_resource_depts", "distinct_devices",
     "foreign_access_count", "bytes_total", "bytes_max", "bytes_mean",
     "distinct_countries", "distinct_ips", "off_hours_flag",
+    "cmd_seq_length", "cmd_risky_count", "cmd_risky_ratio",
+    "cmd_has_escalate", "cmd_has_delete", "cmd_has_export",
+    "cmd_entropy", "auth_risk", "entity_type_code", "fp_mismatch",
 ]
 DEV_FEATURES      = [f"dev_{f}"      for f in BASE_FEATURES]
 PEER_DEV_FEATURES = [f"peer_dev_{f}" for f in BASE_FEATURES]
@@ -75,14 +60,10 @@ ALL_FEATURES      = BASE_FEATURES + DEV_FEATURES + PEER_DEV_FEATURES
 # ─────────────────────────────────────────────────────────────────────────────
 
 class SessionSequenceDataset(Dataset):
-    """
-    Per-entity sliding window sequences.
-    Each item: (X_seq [SEQ_LEN, n_features], label [0/1])
-    """
     def __init__(self, sf: pd.DataFrame, feature_cols: list, seq_len: int):
         self.sequences: list = []
         self.labels:    list = []
-        self.meta:      list = []  # (entity_id, session_id of last window item)
+        self.meta:      list = []
 
         sf = sf.sort_values(["entity_id", "session_start"]).reset_index(drop=True)
 
@@ -100,7 +81,6 @@ class SessionSequenceDataset(Dataset):
                 start = max(0, end - seq_len + 1)
                 window = feats[start:end + 1]
 
-                # Pad front with zeros if window is shorter than seq_len
                 if len(window) < seq_len:
                     pad = np.zeros((seq_len - len(window), window.shape[1]), dtype=np.float32)
                     window = np.concatenate([pad, window], axis=0)
@@ -113,7 +93,7 @@ class SessionSequenceDataset(Dataset):
         return len(self.sequences)
 
     def __getitem__(self, idx):
-        X = torch.from_numpy(self.sequences[idx])      # [SEQ_LEN, n_features]
+        X = torch.from_numpy(self.sequences[idx])
         y = torch.tensor(self.labels[idx], dtype=torch.float32)
         return X, y
 
@@ -127,8 +107,6 @@ class ARGUSTransformerDetector(nn.Module):
                  num_layers: int, dim_ff: int, dropout: float, seq_len: int):
         super().__init__()
         self.input_proj = nn.Linear(n_features, d_model)
-
-        # Learnable positional embeddings
         self.pos_emb = nn.Embedding(seq_len, d_model)
 
         encoder_layer = nn.TransformerEncoderLayer(
@@ -137,7 +115,7 @@ class ARGUSTransformerDetector(nn.Module):
             dim_feedforward=dim_ff,
             dropout=dropout,
             batch_first=True,
-            norm_first=True,        # Pre-norm for training stability
+            norm_first=True,
         )
         self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
 
@@ -150,14 +128,12 @@ class ARGUSTransformerDetector(nn.Module):
         )
 
     def forward(self, x):
-        # x: [B, SEQ_LEN, n_features]
         B, S, _ = x.shape
-        pos = torch.arange(S, device=x.device).unsqueeze(0).expand(B, -1)  # [B, S]
-
-        h = self.input_proj(x) + self.pos_emb(pos)   # [B, S, d_model]
-        h = self.transformer(h)                        # [B, S, d_model]
-        h = self.norm(h[:, -1, :])                     # Last token: [B, d_model]
-        return self.head(h).squeeze(-1)                # [B]
+        pos = torch.arange(S, device=x.device).unsqueeze(0).expand(B, -1)
+        h = self.input_proj(x) + self.pos_emb(pos)
+        h = self.transformer(h)
+        h = self.norm(h[:, -1, :])
+        return self.head(h).squeeze(-1)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -165,7 +141,6 @@ class ARGUSTransformerDetector(nn.Module):
 # ─────────────────────────────────────────────────────────────────────────────
 
 def compute_class_weight(labels: list) -> float:
-    """Return pos_weight for BCEWithLogitsLoss to handle imbalance."""
     n_pos = sum(labels)
     n_neg = len(labels) - n_pos
     return float(n_neg / max(n_pos, 1))
@@ -179,8 +154,7 @@ def train_model(train_dataset: SessionSequenceDataset,
     pos_weight = compute_class_weight(train_dataset.labels)
     print(f"  pos_weight = {pos_weight:.1f}  (n_train_sequences={len(train_dataset):,})")
 
-    loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True,
-                        drop_last=False)
+    loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=False)
 
     model = ARGUSTransformerDetector(
         n_features=n_features,
@@ -221,7 +195,6 @@ def train_model(train_dataset: SessionSequenceDataset,
             avg_loss = total_loss / len(train_dataset)
             print(f"  Epoch {epoch:3d}/{epochs}  loss={avg_loss:.4f}  elapsed={elapsed:.0f}s")
 
-        # Early-exit if training is taking too long (>70 min = hackathon guard)
         if elapsed > 4200:
             print(f"  [WARN] Training time limit reached at epoch {epoch}. Stopping early.")
             break
@@ -255,7 +228,7 @@ def score_dataset(model: ARGUSTransformerDetector,
 def evaluate(
     sf: pd.DataFrame,
     test_session_ids: set,
-    test_scores_map: dict,   # session_id -> transformer_score
+    test_scores_map: dict,
     threshold: float = 0.5,
 ) -> dict:
     test_df = sf[sf["session_id"].isin(test_session_ids)].copy()
@@ -278,26 +251,70 @@ def evaluate(
         "n_malicious_test":  int(y_true.sum()),
     }
 
+    # ── Per-attack-type breakdown (Recall & PR-AUC vs normal) ──
     per_type = {}
-    for atk_type in test_df["attack_type"].unique():
+    for atk_type in sorted(test_df["attack_type"].unique()):
         if atk_type == "none":
             continue
-        mask = (test_df["attack_type"] == atk_type) | (test_df["attack_type"] == "none")
-        sub  = test_df[mask]
-        yt   = sub["is_malicious"].astype(int).values
-        yp   = (sub["transformer_score"].values >= threshold).astype(int)
-        ys   = sub["transformer_score"].values
+        sub_atk = test_df[test_df["attack_type"] == atk_type]
+        sub_norm = test_df[test_df["attack_type"] == "none"]
+        sub = pd.concat([sub_atk, sub_norm])
+
+        yt = sub["is_malicious"].astype(int).values
+        ys = sub["transformer_score"].values
+        yp = (ys >= threshold).astype(int)
+
         n_campaigns = test_df.loc[test_df["attack_type"] == atk_type, "attack_instance_id"].nunique()
+        is_benign_pattern = (atk_type == "insider_drift")
+
+        n_total_atk = len(sub_atk)
+        n_flagged_atk = int((sub_atk["transformer_score"] >= threshold).sum())
+        atk_recall = float(n_flagged_atk / max(n_total_atk, 1))
+
         per_type[atk_type] = {
-            "precision": float(precision_score(yt, yp, zero_division=0)),
-            "recall":    float(recall_score(yt, yp, zero_division=0)),
-            "f1":        float(f1_score(yt, yp, zero_division=0)),
-            "pr_auc":    float(average_precision_score(yt, ys)) if yt.sum() > 0 else 0.0,
-            "n_malicious_sessions": int((yt == 1).sum()),
+            "recall":               round(atk_recall, 4),
+            "pr_auc":               round(float(average_precision_score(yt, ys)), 4) if yt.sum() > 0 else 0.0,
+            "n_sessions_this_type": n_total_atk,
+            "n_flagged_sessions":   n_flagged_atk,
             "n_campaigns_in_test":  int(n_campaigns),
-            "note": "small-sample estimate (1-2 campaigns held out per type)"
+            "is_benign_edge_case":  is_benign_pattern,
+            "note": "BENIGN edge case (is_malicious=False). Model should NOT flag these." if is_benign_pattern else "recall & PR-AUC vs normal traffic"
         }
     results["per_attack_type"] = per_type
+
+    # ── Precision@top-k% alert budget ──
+    top_k_results = {}
+    for pct in [0.5, 1.0, 2.0]:
+        k = max(1, int(len(test_df) * pct / 100.0))
+        top_k_idx = test_df["transformer_score"].nlargest(k).index
+        top_k_df = test_df.loc[top_k_idx]
+        tp = int(top_k_df["is_malicious"].sum())
+        fp = k - tp
+        insider_drift_in_top_k = int((top_k_df["attack_type"] == "insider_drift").sum())
+
+        top_k_results[f"top_{pct}pct"] = {
+            "k": k,
+            "true_positives": tp,
+            "false_positives": fp,
+            "precision": round(tp / k, 4),
+            "insider_drift_flagged": insider_drift_in_top_k,
+            "note": f"Top {pct}% of test sessions by anomaly score ({k} sessions)"
+        }
+    results["precision_at_top_k"] = top_k_results
+
+    # ── Insider drift FP analysis ──
+    drift_test = test_df[test_df["attack_type"] == "insider_drift"]
+    drift_flagged = int((drift_test["transformer_score"] >= threshold).sum()) if len(drift_test) > 0 else 0
+    results["insider_drift_analysis"] = {
+        "total_drift_test_sessions": len(drift_test),
+        "drift_flagged_as_anomaly": drift_flagged,
+        "drift_false_positive_rate": round(drift_flagged / max(len(drift_test), 1), 4),
+        "drift_mean_score": float(drift_test["transformer_score"].mean()) if len(drift_test) > 0 else 0.0,
+        "normal_mean_score": float(test_df.loc[(test_df["attack_type"] == "none"), "transformer_score"].mean()),
+        "malicious_mean_score": float(test_df.loc[test_df["is_malicious"], "transformer_score"].mean()) if y_true.sum() > 0 else 0.0,
+        "note": "insider_drift sessions are BENIGN (is_malicious=False). Flagging them counts against precision."
+    }
+
     return results
 
 
@@ -318,7 +335,6 @@ def main():
     n_features   = len(feature_cols)
     print(f"    {n_features} feature columns.")
 
-    # ── Scale features ────────────────────────────────────────────────────────
     scaler = RobustScaler()
     train_mask = sf["split"] == "train"
     X_all = sf[feature_cols].fillna(0.0).values
@@ -329,35 +345,24 @@ def main():
     for i, col in enumerate(feature_cols):
         sf_scaled[col] = X_scaled[:, i]
 
-    # ── Build datasets ─────────────────────────────────────────────────────────
     train_sf = sf_scaled[sf_scaled["split"] == "train"].reset_index(drop=True)
-    test_sf  = sf_scaled[sf_scaled["split"] == "test"].reset_index(drop=True)
-
-    # We need the full entity history (including test context) for inference,
-    # but we only train on train split to prevent leakage.
     print("[*] Building sequence datasets...")
     train_dataset = SessionSequenceDataset(train_sf, feature_cols, SEQ_LEN)
-    # For inference we build from the full dataset but only evaluate test sessions
     full_dataset  = SessionSequenceDataset(sf_scaled, feature_cols, SEQ_LEN)
     print(f"    Train sequences: {len(train_dataset):,}")
 
-    # ── Train ─────────────────────────────────────────────────────────────────
     print("[*] Training Transformer Detector...")
     model = train_model(train_dataset, n_features)
 
-    # ── Score ALL sessions (needed for fusion) ─────────────────────────────────
     print("[*] Scoring all sessions...")
     all_scores = score_dataset(model, full_dataset)
-    # Map back: full_dataset.meta[i] = (entity_id, session_id)
     score_map = {meta[1]: float(score)
                  for meta, score in zip(full_dataset.meta, all_scores)}
 
-    # ── Evaluate on test split ────────────────────────────────────────────────
     print("[*] Evaluating on test split...")
     test_session_ids = set(sf[sf["split"] == "test"]["session_id"].values)
     results = evaluate(sf, test_session_ids, score_map, threshold=0.5)
 
-    # ── Save model artifacts ──────────────────────────────────────────────────
     os.makedirs("src/models", exist_ok=True)
     weights_path = "src/models/transformer_weights.pt"
     torch.save(model.state_dict(), weights_path)
@@ -375,9 +380,7 @@ def main():
             "dropout":      DROPOUT,
         }, f)
     print(f"[OK] Saved model weights to {weights_path}.")
-    print(f"[OK] Saved model meta to {meta_path}.")
 
-    # ── Save per-session transformer scores for Phase 3 fusion ─────────────
     score_rows = []
     for (entity_id, session_id), score in zip(full_dataset.meta, all_scores):
         score_rows.append({"session_id": session_id, "transformer_score": float(score)})
@@ -386,19 +389,27 @@ def main():
     score_df.to_parquet(score_path, index=False)
     print(f"[OK] Saved {len(score_df):,} session transformer scores to {score_path}.")
 
-    # ── Save results JSON ─────────────────────────────────────────────────────
     results_path = "data/processed/transformer_results.json"
     with open(results_path, "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2)
     print(f"[OK] Saved evaluation results to {results_path}.")
 
-    # ── Print summary ─────────────────────────────────────────────────────────
     ov = results["overall"]
     print(f"\n--- Transformer Test Results ---")
     print(f"  Overall  P={ov['precision']:.3f}  R={ov['recall']:.3f}  F1={ov['f1']:.3f}  PR-AUC={ov['pr_auc']:.3f}  ROC-AUC={ov['roc_auc']:.3f}")
-    print(f"\n  Per-attack-type (small-sample estimates):")
+    print(f"\n  Per-attack-type:")
     for atk, m in results["per_attack_type"].items():
-        print(f"    {atk:20s}  P={m['precision']:.3f}  R={m['recall']:.3f}  F1={m['f1']:.3f}  PR-AUC={m['pr_auc']:.3f}  n_malicious_sessions={m['n_malicious_sessions']}")
+        label = " (BENIGN)" if m.get("is_benign_edge_case") else ""
+        print(f"    {atk:30s}  Recall={m['recall']:.3f}  PR-AUC={m['pr_auc']:.3f}  sessions={m['n_sessions_this_type']}{label}")
+
+    print(f"\n  Precision@top-k% alert budget:")
+    for k, v in results["precision_at_top_k"].items():
+        print(f"    {k}: precision={v['precision']:.3f}  TP={v['true_positives']}  FP={v['false_positives']}  insider_drift_flagged={v['insider_drift_flagged']}  (k={v['k']})")
+
+    ida = results["insider_drift_analysis"]
+    print(f"\n  Insider drift FP analysis:")
+    print(f"    Total drift sessions in test: {ida['total_drift_test_sessions']}")
+    print(f"    Drift flagged as anomaly:     {ida['drift_flagged_as_anomaly']}  (FP rate: {ida['drift_false_positive_rate']:.3f})")
 
 
 if __name__ == "__main__":
