@@ -10,10 +10,10 @@
 | Total test sessions | 3,230 |
 | Malicious sessions | 78 |
 | Normal sessions | 3,152 |
-| Precision | 0.7156 |
+| Precision | 0.7358 |
 | Recall | 1.0000 |
-| F1 | 0.8342 |
-| PR-AUC | 0.9738 |
+| F1 | 0.8478 |
+| PR-AUC | 0.9741 |
 | ROC-AUC | 0.9995 |
 | Precision@top-1% | 1.0000 |
 | Precision@top-3% | 0.8021 |
@@ -24,7 +24,7 @@
 | Tier | Count | Description |
 |------|-------|-------------|
 | 1 (Hard rules) | 61 | fp_mismatch / geo_velocity → 90–100 |
-| 2 (Graph-boosted) | 48 | lateral/relational evidence → 55–89 |
+| 2 (Graph-boosted) | 45 | lateral/relational evidence → 55–89 |
 | 3 (Model-driven) | 0 | IF + Transformer blend → 0–54 |
 
 ## Per-Attack-Type Recall

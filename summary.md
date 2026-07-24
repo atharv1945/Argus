@@ -27,10 +27,16 @@ argus/
  │         ├── transformer_results.json      <-- Transformer evaluation metrics
  │         ├── detection_core_v1_results.md  <-- Phase 2 consolidated results report
  │         ├── graph_features.parquet        <-- Phase 3 per-session graph heuristic signals
+ │         ├── cohort_features.parquet       <-- Phase 3 shared-IP fan-in features
  │         ├── entity_graph.pkl              <-- Serialised EntityGraph (NetworkX)
  │         ├── fused_scores.parquet          <-- Phase 3 fused risk scores (9,476 sessions)
  │         ├── fusion_results.json           <-- Phase 3 machine-readable evaluation metrics
- │         └── fusion_eval_report.md         <-- Phase 3 human-readable evaluation report
+ │         ├── fusion_eval_report.md         <-- Phase 3 human-readable evaluation report
+ │         ├── phase3_verification_report.md <-- Phase 3 verification (ID/LM & CS analysis)
+ │         ├── phase3_fix_verification_report.md <-- Phase 3 precision drop analysis (Part A)
+ │         ├── drift_baseline.json           <-- Phase 4 drift monitoring training baseline
+ │         ├── alert_cases.parquet           <-- Phase 4 deduplicated alert cases (625 cases)
+ │         └── phase4_results.md             <-- Phase 4 results report
  ├── notebooks/
  │    └── .gitkeep
  └── src/
@@ -41,15 +47,22 @@ argus/
       ├── models/
       │    ├── isolation_forest.py           <-- Isolation Forest training & evaluation
       │    ├── sequence_model.py             <-- Transformer Sequence training & evaluation
+      │    ├── calibrate_transformer.py      <-- Phase 4 Platt scaling + ECE + threshold sweep
       │    ├── iforest_model.pkl             <-- Saved IF model object & scaler
       │    ├── transformer_weights.pt        <-- PyTorch Transformer weights state_dict
-      │    └── transformer_meta.pkl          <-- Hyperparameters, scaler, & model features
+      │    ├── transformer_meta.pkl          <-- Hyperparameters, scaler, & model features
+      │    └── calibration_params.json       <-- Phase 4 Platt a, b + ECE + optimal threshold
       ├── graph/
       │    └── entity_graph.py               <-- NetworkX graph builder + graph heuristic signals
+      ├── monitoring/
+      │    ├── drift_monitor.py              <-- Phase 4 PSI + KS + alert-rate drift detection
+      │    └── run_drift_check.py            <-- Phase 4 CLI: sanity + synthetic drift check
       └── fusion/
            ├── anomaly_first_fusion.py       <-- 3-tier fusion engine (hard-rule > graph > model)
            ├── attack_classifier.py          <-- Rule-based attack type tagger (9 categories)
-           └── evaluate_fusion.py            <-- End-to-end Phase 3 evaluation pipeline
+           ├── build_cohort_features.py      <-- Phase 3 shared-IP fan-in per session
+           ├── alert_dedup.py                <-- Phase 4 24h-window alert deduplication
+           └── evaluate_fusion.py            <-- End-to-end Phase 3+4 evaluation pipeline
 ```
 
 ---
@@ -98,28 +111,48 @@ Known limitations entering Phase 3:
 - IF flags all insider_drift sessions (FPR=1.0) -- unsupervised density model cannot separate benign shifts
 - Transformer recall=0 on impossible_travel and device_spoofing (single-event sessions, score ~0.479)
 
-### Phase 3: Graph Layer + Anomaly-First Fusion
+### Phase 3: Graph Layer + Anomaly-First Fusion (Post-Fix)
 
-| Metric | Phase 2 Best | Phase 3 Fusion |
-|:-------|:------------:|:--------------:|
-| Precision | 0.681 | **0.772** |
+> All Phase 3 metrics below are from the **post-diagnostic final state** (graph timestamp
+> bug fixed, ip_fan_in floor fix applied, cohort feature timestamp fix applied).
+> Pre-fix baseline (with dead graph layer) was Precision=0.772, F1=0.872.
+
+| Metric | Phase 2 Best | Phase 3 Fusion (Final) |
+|:-------|:------------:|:----------------------:|
+| Precision | 0.681 | **0.736** |
 | Recall | 0.987 | **1.000** |
-| F1 | 0.806 | **0.872** |
-| PR-AUC | 0.986 | **0.987** |
-| ROC-AUC | 0.999 | **0.9997** |
+| F1 | 0.806 | **0.848** |
+| PR-AUC | 0.986 | **0.974** |
+| ROC-AUC | 0.999 | **0.9995** |
 | P@top-1% | 1.000 | **1.000** |
 | insider_drift FPR | 0.0 | **0.0** |
 | impossible_travel Recall | 0.0 | **1.000** |
 | device_spoofing Recall | 0.0 | **1.000** |
+| lateral_movement Recall | 1.000 | **1.000 (Tier 1, graph-corroborated)** |
 
 All 7 attack types: **Recall = 1.000**.
-False positive rate: **0.73%** (23 / 3,152 normal test sessions flagged).
-Rule classifier accuracy: **93.6%** (73/78 correct attack type labels on malicious sessions).
+False positive rate: **0.89%** (28 / 3,152 normal test sessions flagged).
+Rule classifier accuracy: **94.9%** (74/78 correct attack type labels on malicious sessions).
 
-#### Alert Tier Distribution (test split)
+#### Alert Tier Distribution (test split, final)
 
 | Tier | Sessions | Attack Types Covered |
 |------|----------|---------------------|
-| **1** (Hard Rules, score 90-100) | 56 | credential_stuffing (52), device_spoofing (2), impossible_travel (2) |
-| **2** (Graph-Boosted, score 55-89) | 45 | brute_force, credential_misuse, lateral_movement, low_and_slow_exfiltration |
-| **3** (Model-Driven, score 0-54) | 0 | None -- all malicious sessions captured by tiers 1/2 |
+| **1** (Hard Rules, score 90–100) | 61 | credential_stuffing (52), device_spoofing (2), impossible_travel (2), lateral_movement (2), + 3 FPs |
+| **2** (Graph-Boosted, score 55–89) | 45 | brute_force, credential_misuse, low_and_slow_exfiltration, + 25 FPs |
+| **3** (Model-Driven, score 0–54) | 0 | None — all malicious sessions captured by tiers 1/2 |
+
+#### Known Limitations Inherited by Phase 5
+- **Role-aware graph normalisation**: 3 Tier-1 FPs from IT/service-account entities with `new_device_edge_count=2` require per-role peer-group baselining to resolve. Global threshold cannot distinguish legitimate multi-device IT workflows from actual lateral movement.
+- **Drift baseline must use benign reference window**: Current `drift_baseline.json` built from the mixed training split (includes injected attacks). Production baseline must use verified-benign traffic only.
+
+### Phase 4: Drift Detection + Imbalance Handling + Alert Dedup
+
+| Component | Result |
+|-----------|--------|
+| **Drift monitor (PSI)** | Baseline saved. Synthetic drift (+20 score) → PSI=56.19, SIGNIFICANT ✓ |
+| **Drift monitor (KS)** | Both transformer + iforest KS tests trigger on shifted data (p≈0) ✓ |
+| **Sanity check** | MODERATE on train vs test — expected (campaign-level split skews distribution; production baseline must use benign-only reference) |
+| **Platt calibration ECE** | 0.00906 → **0.00452** (50.1% reduction) |
+| **Optimal threshold** | **0.50** confirmed optimal (F1=0.9663, same as default) |
+| **Alert dedup (24h window)** | 710 alerts → 625 cases (12.0% suppression); credential stuffing: 125 sessions → 40 cases (3.1×) |

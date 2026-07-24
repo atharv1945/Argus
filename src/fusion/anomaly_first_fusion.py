@@ -191,9 +191,13 @@ def compute_fused_risk(merged_df: pd.DataFrame) -> pd.DataFrame:
     fan_out_cap = df["entity_fan_out"].quantile(0.99) + 1e-6
     df["entity_fan_out_norm"] = (df["entity_fan_out"] / fan_out_cap).clip(0, 1)
 
-    # Normalise ip_entity_fan_in to [0, 1] (cap at 99th percentile)
+    # Normalise ip_entity_fan_in to [0, 1] (cap at 99th percentile).
+    # FIX: ip_entity_fan_in=1 = "only self from this IP" = no cohort signal.
+    # Floor to 0 for fan_in < 2 to avoid leaking 0.0125 residual uplift onto
+    # every single-entity session (which was causing 3 spurious Tier-2 FPs).
     ip_fan_cap = df["ip_entity_fan_in"].quantile(0.99) + 1e-6
-    df["ip_fan_in_norm"] = (df["ip_entity_fan_in"] / ip_fan_cap).clip(0, 1)
+    df["ip_fan_in_norm"] = ((df["ip_entity_fan_in"] >= 2).astype(float)
+                            * (df["ip_entity_fan_in"] / ip_fan_cap)).clip(0, 1)
 
     df["graph_boost"] = (
         df["lateral_hop_score"].fillna(0)  * GRAPH_BOOST_WEIGHTS["lateral_hop_score"]

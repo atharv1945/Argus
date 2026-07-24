@@ -37,6 +37,7 @@ from sklearn.metrics import (
 from src.graph.entity_graph import build_graph_features
 from src.fusion.anomaly_first_fusion import load_and_merge, compute_fused_risk
 from src.fusion.build_cohort_features import build_ip_cohort_features
+from src.fusion.alert_dedup import dedup_alerts
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -270,6 +271,15 @@ def main():
     result.to_parquet(fused_path, index=False)
     print(f"[OK] Fused scores saved → {fused_path}")
 
+    # ── Step 4: Alert deduplication ────────────────────────────────────
+    cases_path = "data/processed/alert_cases.parquet"
+    print("[*] Running alert deduplication (24h window)...")
+    case_df = dedup_alerts(result, window_hours=24)
+    case_df.to_parquet(cases_path, index=False)
+    n_alert_sessions = int((result["fused_risk_score"] >= ALERT_THRESHOLD).sum())
+    print(f"[OK] Alert cases saved → {cases_path}  "
+          f"({n_alert_sessions} alert sessions → {len(case_df)} cases)")
+
     # ── Step 3: Evaluate on test split ────────────────────────────────────────
     test = result[result["split"] == "test"].copy()
     y_true  = test["is_malicious"].astype(int)
@@ -353,6 +363,13 @@ def main():
     if ca:
         print(f"  Rule classifier accuracy: {ca['accuracy']:.4f}  "
               f"({ca['correct_label']}/{ca['total_malicious_test_sessions']})")
+    print()
+    # Case-level dedup summary (Phase 4)
+    test_cases = case_df[case_df["split"] == "test"]
+    print(f"  Alert dedup (Phase 4, 24h window):")
+    print(f"    {n_alert_sessions} alert sessions → {len(test_cases)} test cases  "
+          f"(suppression rate: "
+          f"{100*case_df['suppressed_count'].sum()/max(n_alert_sessions,1):.1f}%)")
     print("="*60)
 
 
