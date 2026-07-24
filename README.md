@@ -12,8 +12,15 @@ ARGUS is a real-time, multi-vector User and Entity Behavior Analytics (UEBA) cyb
 
 ## Quick Start
 
-### 1. Install Dependencies
+### 1. Activate Virtual Environment & Install Dependencies
 ```bash
+# Windows (Git Bash / Bash):
+source venv/Scripts/activate
+
+# PowerShell:
+.\venv\Scripts\Activate.ps1
+
+# Install requirements inside venv:
 pip install -r requirements.txt
 ```
 
