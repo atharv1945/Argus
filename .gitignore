@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+
+# Jupyter Notebooks
+.ipynb_checkpoints
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Data & Models (keep processed deliverables, ignore scratch/checkpoints)
+models/checkpoints/
+*.bin
+
+# OS specific
+.DS_Store
+Thumbs.db
