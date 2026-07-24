@@ -31,7 +31,7 @@ class GeneratorConfig:
     num_days: int = 21
     start_date_str: str = "2026-06-01"
     random_seed: int = 42
-    attack_entity_ratio: float = 0.015  # ~1.5% of entities targeted by attack campaigns
+    attack_entity_ratio: float = 0.07  # ~7% of entities targeted by attack campaigns (28 entities)
     output_dir: str = "data/processed"
 
 DEPARTMENTS = {
@@ -304,12 +304,11 @@ class AttackInjector:
 
     def inject_all_vectors(self) -> List[Dict]:
         attack_events = []
-        num_attack_users = max(5, int(len(self.profiles) * self.config.attack_entity_ratio))
+        num_attack_users = max(25, int(len(self.profiles) * self.config.attack_entity_ratio))
         
-        # Select target entities for attack campaigns
+        # Select target entities for attack campaigns without replacement
         target_users = random.sample(self.profiles, num_attack_users)
         
-        # Assign attack types across target entities
         attack_types = [
             "credential_misuse",
             "brute_force",
@@ -318,20 +317,27 @@ class AttackInjector:
             "device_spoofing"
         ]
         
+        vector_campaign_counts = {at: 0 for at in attack_types}
+        
         for idx, user in enumerate(target_users):
             attack_type = attack_types[idx % len(attack_types)]
-            campaign_date = self.start_date + timedelta(days=random.randint(5, self.config.num_days - 2))
+            vector_campaign_counts[attack_type] += 1
+            campaign_num = vector_campaign_counts[attack_type]
+            
+            # Spread campaigns across the 21-day timeline (days 2 to 19)
+            day_offset = random.randint(2, max(2, self.config.num_days - 2))
+            campaign_date = self.start_date + timedelta(days=day_offset)
             
             if attack_type == "credential_misuse":
-                attack_events.extend(self._inject_credential_misuse(user, campaign_date, idx + 1))
+                attack_events.extend(self._inject_credential_misuse(user, campaign_date, campaign_num))
             elif attack_type == "brute_force":
-                attack_events.extend(self._inject_brute_force(user, campaign_date, idx + 1))
+                attack_events.extend(self._inject_brute_force(user, campaign_date, campaign_num))
             elif attack_type == "lateral_movement":
-                attack_events.extend(self._inject_lateral_movement(user, campaign_date, idx + 1))
+                attack_events.extend(self._inject_lateral_movement(user, campaign_date, campaign_num))
             elif attack_type == "impossible_travel":
-                attack_events.extend(self._inject_impossible_travel(user, campaign_date, idx + 1))
+                attack_events.extend(self._inject_impossible_travel(user, campaign_date, campaign_num))
             elif attack_type == "device_spoofing":
-                attack_events.extend(self._inject_device_spoofing(user, campaign_date, idx + 1))
+                attack_events.extend(self._inject_device_spoofing(user, campaign_date, campaign_num))
                 
         return attack_events
 
@@ -340,19 +346,21 @@ class AttackInjector:
         events = []
         instance_id = f"ATK_CM_{date.strftime('%Y%m%d')}_{campaign_num:03d}"
         
-        # Off-hours: 02:15 AM
-        start_time = date.replace(hour=2, minute=15, second=0)
+        # Off-hours variation: 1:00 AM, 2:15 AM, 3:30 AM, 10:45 PM
+        off_hour = random.choice([1, 2, 3, 22, 23])
+        off_min = random.randint(5, 55)
+        start_time = date.replace(hour=off_hour, minute=off_min, second=0)
         session_id = f"SESS_MAL_{uuid.uuid4().hex[:10]}"
         
-        # Foreign sensitive resources (e.g. Executive vault / HR records for non-exec/hr)
+        # Foreign sensitive resources
         sensitive_targets = [
             ("RES_EXEC_STRATEGY", "Executive"),
             ("DB_FIN_PAYROLL", "Finance"),
             ("RES_EXEC_LEGAL_VAULT", "Executive"),
-            ("DB_HR_EMPLOYEE_RECORDS", "HR")
+            ("DB_HR_EMPLOYEE_RECORDS", "HR"),
+            ("DB_ENG_CODEBASE", "Engineering")
         ]
         
-        # Filter targets outside user's department
         foreign_targets = [t for t in sensitive_targets if t[1] != user.entity_dept]
         if not foreign_targets:
             foreign_targets = sensitive_targets
@@ -377,11 +385,12 @@ class AttackInjector:
             "attack_instance_id": instance_id
         })
         
-        # Exfiltration events (large file downloads)
-        for i in range(6):
-            t_offset = start_time + timedelta(minutes=i*4 + random.randint(1, 3))
+        # Exfiltration events (varying count & volume)
+        num_exfil_events = random.randint(4, 9)
+        for i in range(num_exfil_events):
+            t_offset = start_time + timedelta(minutes=i*3 + random.randint(1, 3))
             res_id, res_dept = random.choice(foreign_targets)
-            bytes_tx = random.randint(15_000_000, 80_000_000)  # 15MB - 80MB exfiltration
+            bytes_tx = random.randint(10_000_000, 90_000_000)
             
             events.append({
                 "entity_id": user.entity_id,
@@ -407,7 +416,7 @@ class AttackInjector:
             "entity_id": user.entity_id,
             "entity_role": user.entity_role,
             "entity_dept": user.entity_dept,
-            "timestamp": start_time + timedelta(minutes=32),
+            "timestamp": start_time + timedelta(minutes=num_exfil_events*3 + 5),
             "event_type": "logoff",
             "resource_id": "RES_IT_JUMPBOX",
             "resource_dept": "IT",
@@ -429,13 +438,18 @@ class AttackInjector:
         events = []
         instance_id = f"ATK_BF_{date.strftime('%Y%m%d')}_{campaign_num:03d}"
         
-        start_time = date.replace(hour=11, minute=42, second=0)
+        start_hour = random.randint(7, 21)
+        start_time = date.replace(hour=start_hour, minute=random.randint(0, 50), second=0)
         session_id = f"SESS_BF_{uuid.uuid4().hex[:10]}"
-        target_res = "RES_FIN_ERP" if user.entity_dept != "Finance" else "RES_ENG_SRV_01"
         
-        # 25 Rapid Failed Logons in 3 minutes
-        for i in range(25):
-            t_offset = start_time + timedelta(seconds=i*7 + random.randint(0, 3))
+        target_res = random.choice(["RES_FIN_ERP", "DB_ENG_CODEBASE", "RES_HR_PORTAL", "RES_IT_AD_DC", "RES_EXEC_FINANCIALS"])
+        target_dept = "Finance" if "FIN" in target_res else ("Engineering" if "ENG" in target_res else ("HR" if "HR" in target_res else "IT"))
+        attacker_ip = f"198.51.100.{random.randint(10, 200)}"
+        
+        # Varying failure count (15 to 35)
+        fail_count = random.randint(15, 35)
+        for i in range(fail_count):
+            t_offset = start_time + timedelta(seconds=i*random.randint(4, 8))
             events.append({
                 "entity_id": user.entity_id,
                 "entity_role": user.entity_role,
@@ -443,10 +457,10 @@ class AttackInjector:
                 "timestamp": t_offset,
                 "event_type": "logon",
                 "resource_id": target_res,
-                "resource_dept": "Finance" if target_res == "RES_FIN_ERP" else "Engineering",
+                "resource_dept": target_dept,
                 "device_id": user.primary_device,
                 "geo_country": user.home_country,
-                "geo_ip": "198.51.100.77",  # Attacker IP
+                "geo_ip": attacker_ip,
                 "session_id": session_id,
                 "bytes_transferred": 0,
                 "status": "FAILURE",
@@ -456,7 +470,7 @@ class AttackInjector:
             })
             
         # 1 Successful Compromise Logon
-        succ_time = start_time + timedelta(minutes=3, seconds=15)
+        succ_time = start_time + timedelta(seconds=fail_count*6 + 10)
         events.append({
             "entity_id": user.entity_id,
             "entity_role": user.entity_role,
@@ -464,10 +478,10 @@ class AttackInjector:
             "timestamp": succ_time,
             "event_type": "logon",
             "resource_id": target_res,
-            "resource_dept": "Finance" if target_res == "RES_FIN_ERP" else "Engineering",
+            "resource_dept": target_dept,
             "device_id": user.primary_device,
             "geo_country": user.home_country,
-            "geo_ip": "198.51.100.77",
+            "geo_ip": attacker_ip,
             "session_id": session_id,
             "bytes_transferred": 0,
             "status": "SUCCESS",
@@ -484,12 +498,12 @@ class AttackInjector:
             "timestamp": succ_time + timedelta(seconds=45),
             "event_type": "file_access",
             "resource_id": target_res,
-            "resource_dept": "Finance" if target_res == "RES_FIN_ERP" else "Engineering",
+            "resource_dept": target_dept,
             "device_id": user.primary_device,
             "geo_country": user.home_country,
-            "geo_ip": "198.51.100.77",
+            "geo_ip": attacker_ip,
             "session_id": session_id,
-            "bytes_transferred": 42_500_000,
+            "bytes_transferred": random.randint(20_000_000, 60_000_000),
             "status": "SUCCESS",
             "is_malicious": True,
             "attack_type": "brute_force",
@@ -503,13 +517,13 @@ class AttackInjector:
         events = []
         instance_id = f"ATK_LM_{date.strftime('%Y%m%d')}_{campaign_num:03d}"
         
-        start_time = date.replace(hour=14, minute=10, second=0)
+        start_hour = random.randint(8, 20)
+        start_time = date.replace(hour=start_hour, minute=random.randint(0, 45), second=0)
         session_id = f"SESS_LM_{uuid.uuid4().hex[:10]}"
         
-        # Collect 8 foreign devices across various departments
-        foreign_devices = [f"DEV_FOREIGN_HOST_{i:02d}" for i in range(1, 9)]
+        num_hosts = random.randint(5, 12)
+        foreign_devices = [f"DEV_FOREIGN_HOST_{campaign_num:02d}_{i:02d}" for i in range(1, num_hosts + 1)]
         
-        # Initial logon
         events.append({
             "entity_id": user.entity_id,
             "entity_role": user.entity_role,
@@ -529,10 +543,9 @@ class AttackInjector:
             "attack_instance_id": instance_id
         })
         
-        # Rapid fan-out terminal/device connections across foreign hosts
         for i, dev in enumerate(foreign_devices):
-            t_offset = start_time + timedelta(minutes=i*3 + 1)
-            target_res = f"RES_SRV_HOST_{i+1:02d}"
+            t_offset = start_time + timedelta(minutes=i*2 + 1)
+            target_res = f"RES_SRV_HOST_{campaign_num:02d}_{i+1:02d}"
             target_dept = random.choice(["Finance", "HR", "Executive", "Engineering"])
             
             events.append({
@@ -554,12 +567,11 @@ class AttackInjector:
                 "attack_instance_id": instance_id
             })
             
-            # Reconnaissance HTTP / File queries
             events.append({
                 "entity_id": user.entity_id,
                 "entity_role": user.entity_role,
                 "entity_dept": user.entity_dept,
-                "timestamp": t_offset + timedelta(seconds=45),
+                "timestamp": t_offset + timedelta(seconds=35),
                 "event_type": "file_access",
                 "resource_id": target_res,
                 "resource_dept": target_dept,
@@ -567,7 +579,7 @@ class AttackInjector:
                 "geo_country": user.home_country,
                 "geo_ip": user.home_ip,
                 "session_id": session_id,
-                "bytes_transferred": random.randint(1_000_000, 10_000_000),
+                "bytes_transferred": random.randint(1_000_000, 15_000_000),
                 "status": "SUCCESS",
                 "is_malicious": True,
                 "attack_type": "lateral_movement",
@@ -581,9 +593,9 @@ class AttackInjector:
         events = []
         instance_id = f"ATK_IT_{date.strftime('%Y%m%d')}_{campaign_num:03d}"
         
-        # 1. Normal US Logon at 10:00:00
-        time_us = date.replace(hour=10, minute=0, second=0)
-        session_us = f"SESS_US_{uuid.uuid4().hex[:8]}"
+        start_hour = random.randint(8, 19)
+        time_us = date.replace(hour=start_hour, minute=random.randint(0, 30), second=0)
+        session_us = f"SESS_HOME_{uuid.uuid4().hex[:8]}"
         
         events.append({
             "entity_id": user.entity_id,
@@ -594,22 +606,26 @@ class AttackInjector:
             "resource_id": "PORTAL_INTRANET",
             "resource_dept": "General",
             "device_id": user.primary_device,
-            "geo_country": "US",
+            "geo_country": user.home_country,
             "geo_ip": user.home_ip,
             "session_id": session_us,
             "bytes_transferred": 0,
             "status": "SUCCESS",
-            "is_malicious": False,  # Legitimate US session
+            "is_malicious": False,  # Legitimate home session
             "attack_type": "none",
             "attack_instance_id": "none"
         })
         
-        # 2. Impossible Travel Logon from CN/RU 14 minutes later
-        time_foreign = time_us + timedelta(minutes=14)
+        # Foreign logon 8-25 mins later
+        elapsed_mins = random.randint(8, 25)
+        time_foreign = time_us + timedelta(minutes=elapsed_mins)
         session_foreign = f"SESS_IMP_{uuid.uuid4().hex[:8]}"
+        
         foreign_country, foreign_ip = random.choice([
-            ("CN", "202.108.22.99"),
-            ("RU", "95.173.136.42")
+            ("CN", f"202.108.{random.randint(1,250)}.{random.randint(1,250)}"),
+            ("RU", f"95.173.{random.randint(1,250)}.{random.randint(1,250)}"),
+            ("JP", f"133.242.{random.randint(1,250)}.{random.randint(1,250)}"),
+            ("BR", f"177.126.{random.randint(1,250)}.{random.randint(1,250)}")
         ])
         
         events.append({
@@ -631,13 +647,13 @@ class AttackInjector:
             "attack_instance_id": instance_id
         })
         
-        # Suspicious accesses from foreign IP
-        for i in range(4):
+        num_accesses = random.randint(3, 6)
+        for i in range(num_accesses):
             events.append({
                 "entity_id": user.entity_id,
                 "entity_role": user.entity_role,
                 "entity_dept": user.entity_dept,
-                "timestamp": time_foreign + timedelta(minutes=i*3 + 2),
+                "timestamp": time_foreign + timedelta(minutes=i*2 + 2),
                 "event_type": "http",
                 "resource_id": "GW_PROXY_01",
                 "resource_dept": "IT",
@@ -645,7 +661,7 @@ class AttackInjector:
                 "geo_country": foreign_country,
                 "geo_ip": foreign_ip,
                 "session_id": session_foreign,
-                "bytes_transferred": random.randint(5_000_000, 35_000_000),
+                "bytes_transferred": random.randint(5_000_000, 40_000_000),
                 "status": "SUCCESS",
                 "is_malicious": True,
                 "attack_type": "impossible_travel",
@@ -659,9 +675,15 @@ class AttackInjector:
         events = []
         instance_id = f"ATK_DS_{date.strftime('%Y%m%d')}_{campaign_num:03d}"
         
-        start_time = date.replace(hour=16, minute=20, second=0)
+        start_hour = random.randint(6, 21)
+        start_time = date.replace(hour=start_hour, minute=random.randint(0, 45), second=0)
         session_id = f"SESS_DS_{uuid.uuid4().hex[:10]}"
-        spoofed_device = f"DEV_SPOOFED_ROGUE_{random.randint(100, 999)}"
+        
+        spoofed_device = random.choice([
+            f"DEV_UNREGISTERED_MAC_{uuid.uuid4().hex[:6].upper()}",
+            f"DEV_ROGUE_BYOD_{random.randint(100, 999)}",
+            f"DEV_SPOOFED_HOST_{random.randint(100, 999)}"
+        ])
         
         events.append({
             "entity_id": user.entity_id,
@@ -673,7 +695,7 @@ class AttackInjector:
             "resource_dept": "IT",
             "device_id": spoofed_device,
             "geo_country": user.home_country,
-            "geo_ip": "10.0.99.14",  # Rogue internal IP
+            "geo_ip": f"10.0.99.{random.randint(10, 200)}",
             "session_id": session_id,
             "bytes_transferred": 0,
             "status": "SUCCESS",
@@ -682,7 +704,8 @@ class AttackInjector:
             "attack_instance_id": instance_id
         })
         
-        for i in range(5):
+        num_accesses = random.randint(4, 7)
+        for i in range(num_accesses):
             events.append({
                 "entity_id": user.entity_id,
                 "entity_role": user.entity_role,
@@ -693,9 +716,9 @@ class AttackInjector:
                 "resource_dept": user.entity_dept,
                 "device_id": spoofed_device,
                 "geo_country": user.home_country,
-                "geo_ip": "10.0.99.14",
+                "geo_ip": f"10.0.99.{random.randint(10, 200)}",
                 "session_id": session_id,
-                "bytes_transferred": random.randint(10_000_000, 50_000_000),
+                "bytes_transferred": random.randint(10_000_000, 60_000_000),
                 "status": "SUCCESS",
                 "is_malicious": True,
                 "attack_type": "device_spoofing",
@@ -763,6 +786,17 @@ def create_summary_markdown(df: pd.DataFrame, profiles: List[UserProfile], confi
     
     dept_entity_counts = pd.Series([p.entity_dept for p in profiles]).value_counts().to_dict()
     
+    # Campaign validation check across all 5 attack vectors
+    expected_vectors = ["credential_misuse", "brute_force", "lateral_movement", "impossible_travel", "device_spoofing"]
+    failed_vectors = [v for v in expected_vectors if campaign_counts.get(v, 0) < 4]
+    
+    if failed_vectors:
+        campaign_check_str = f"- [ ] **WARNING - Campaign Density Check Failed**: Vector(s) {failed_vectors} have < 4 campaigns!"
+        print(f"[WARNING] Campaign validation check failed for vectors: {failed_vectors}")
+    else:
+        campaign_check_str = f"- [x] **Campaign Density Validation**: Every attack vector has >= 4 distinct campaign instances (range: 5-6 campaigns/vector)."
+        print("[OK] Campaign validation check passed! Every attack vector has >= 4 distinct campaigns.")
+
     summary = f"""# ARGUS Synthetic Security Dataset Summary
 
 ## Dataset Overview
@@ -823,6 +857,7 @@ def create_summary_markdown(df: pd.DataFrame, profiles: List[UserProfile], confi
 - [x] **Schema Integrity**: All 16 fields present and strongly typed according to canonical specification.
 - [x] **Parquet Format**: Optimized columnar output ready for pandas, PyTorch, and GNN pipelines.
 - [x] **Reproducibility**: Seeded generator (`seed={config.random_seed}`) ensures deterministic reproduction.
+{campaign_check_str}
 """
 
     return summary
@@ -836,7 +871,7 @@ if __name__ == "__main__":
     parser.add_argument("--num-users", type=int, default=400, help="Number of synthetic entities to simulate (default: 400)")
     parser.add_argument("--num-days", type=int, default=21, help="Number of simulation days (default: 21)")
     parser.add_argument("--start-date", type=str, default="2026-06-01", help="Simulation start date YYYY-MM-DD (default: 2026-06-01)")
-    parser.add_argument("--attack-ratio", type=float, default=0.015, help="Ratio of entities targeted by attack campaigns (default: 0.015)")
+    parser.add_argument("--attack-ratio", type=float, default=0.07, help="Ratio of entities targeted by attack campaigns (default: 0.07)")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility (default: 42)")
     parser.add_argument("--output-dir", type=str, default="data/processed", help="Output directory for parquet & summary (default: data/processed)")
     
@@ -852,3 +887,4 @@ if __name__ == "__main__":
     )
     
     generate_dataset(cfg)
+
