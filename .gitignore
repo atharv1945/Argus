@@ -18,9 +18,15 @@ ENV/
 *.swp
 *.swo
 
-# Data & Models (keep processed deliverables, ignore scratch/checkpoints)
-models/checkpoints/
+# Data & Models
+# Ignore large binary artifacts but keep source code and summary docs
 *.bin
+*.pt                          # PyTorch weights
+*.pkl                         # Pickled sklearn models
+# Intermediate score parquets (regeneratable from source)
+data/processed/iforest_scores.parquet
+data/processed/transformer_scores.parquet
+data/processed/session_features.parquet
 
 # OS specific
 .DS_Store

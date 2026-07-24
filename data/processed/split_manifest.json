@@ -1,0 +1,60 @@
+{
+  "split_strategy": {
+    "malicious": "Campaign-level hold-out \u2014 latest 1-2 campaigns per attack_type go to test. No event-level leakage.",
+    "normal": "Chronological split \u2014 events before 2026-06-14 00:00 UTC go to train, remainder to test (approx 65/35 by day count).",
+    "seed": 42
+  },
+  "train_campaigns": {
+    "brute_force": [
+      "ATK_BF_20260605_005",
+      "ATK_BF_20260608_004",
+      "ATK_BF_20260608_006",
+      "ATK_BF_20260611_002"
+    ],
+    "credential_misuse": [
+      "ATK_CM_20260603_006",
+      "ATK_CM_20260607_001",
+      "ATK_CM_20260612_003",
+      "ATK_CM_20260614_004"
+    ],
+    "device_spoofing": [
+      "ATK_DS_20260606_003",
+      "ATK_DS_20260615_004",
+      "ATK_DS_20260616_005"
+    ],
+    "impossible_travel": [
+      "ATK_IT_20260604_005",
+      "ATK_IT_20260609_003",
+      "ATK_IT_20260612_001"
+    ],
+    "lateral_movement": [
+      "ATK_LM_20260607_002",
+      "ATK_LM_20260607_005",
+      "ATK_LM_20260608_001",
+      "ATK_LM_20260614_003"
+    ]
+  },
+  "test_campaigns": {
+    "brute_force": [
+      "ATK_BF_20260613_003",
+      "ATK_BF_20260617_001"
+    ],
+    "credential_misuse": [
+      "ATK_CM_20260615_005",
+      "ATK_CM_20260616_002"
+    ],
+    "device_spoofing": [
+      "ATK_DS_20260619_001",
+      "ATK_DS_20260620_002"
+    ],
+    "impossible_travel": [
+      "ATK_IT_20260612_004",
+      "ATK_IT_20260620_002"
+    ],
+    "lateral_movement": [
+      "ATK_LM_20260616_004",
+      "ATK_LM_20260620_006"
+    ]
+  },
+  "normal_cutoff_date": "2026-06-14T00:00:00"
+}
