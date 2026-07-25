@@ -130,6 +130,8 @@ SPLIT_MANIFEST = {
             "ATK_LS_20260619_002",
             "ATK_LS_20260619_004",
         ],
+
+
     },
     # insider_drift: campaigns 1-5 original, campaign 6 harder (G2)
     # Campaign 6 spans 2 days: sessions on day0 (step 0-2) → train, day1 (step 3-4) → test
@@ -482,6 +484,8 @@ def assign_split(sf: pd.DataFrame) -> pd.DataFrame:
         else:
             # Pure normal traffic: chronological split
             return "train" if row["session_start"] < cutoff else "test"
+
+
 
     sf["split"] = sf.apply(_split, axis=1)
     return sf

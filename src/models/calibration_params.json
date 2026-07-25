@@ -1,259 +1,259 @@
 {
   "platt": {
-    "a": 15.867328,
-    "b": -8.999974
+    "a": 11.39527,
+    "b": -8.853602
   },
   "ece": {
-    "before": 0.009058,
-    "after": 0.004522,
-    "delta": 0.004536
+    "before": 0.012011,
+    "after": 0.005014,
+    "delta": 0.006998
   },
   "threshold_sweep_raw": [
     {
       "threshold": 0.1,
-      "precision": 0.5584,
-      "recall": 0.9773,
-      "f1": 0.7107,
-      "n_flagged": 77
+      "precision": 0.5,
+      "recall": 0.9677,
+      "f1": 0.6593,
+      "n_flagged": 60
     },
     {
       "threshold": 0.15,
-      "precision": 0.6232,
-      "recall": 0.9773,
-      "f1": 0.7611,
-      "n_flagged": 69
+      "precision": 0.5263,
+      "recall": 0.9677,
+      "f1": 0.6818,
+      "n_flagged": 57
     },
     {
       "threshold": 0.2,
-      "precision": 0.6232,
-      "recall": 0.9773,
-      "f1": 0.7611,
-      "n_flagged": 69
+      "precision": 0.5263,
+      "recall": 0.9677,
+      "f1": 0.6818,
+      "n_flagged": 57
     },
     {
       "threshold": 0.25,
-      "precision": 0.6232,
-      "recall": 0.9773,
-      "f1": 0.7611,
-      "n_flagged": 69
+      "precision": 0.5357,
+      "recall": 0.9677,
+      "f1": 0.6897,
+      "n_flagged": 56
     },
     {
       "threshold": 0.3,
-      "precision": 0.6232,
-      "recall": 0.9773,
-      "f1": 0.7611,
-      "n_flagged": 69
+      "precision": 0.5556,
+      "recall": 0.9677,
+      "f1": 0.7059,
+      "n_flagged": 54
     },
     {
       "threshold": 0.35,
-      "precision": 0.6324,
-      "recall": 0.9773,
-      "f1": 0.7679,
-      "n_flagged": 68
+      "precision": 0.5556,
+      "recall": 0.9677,
+      "f1": 0.7059,
+      "n_flagged": 54
     },
     {
       "threshold": 0.4,
-      "precision": 0.6324,
-      "recall": 0.9773,
-      "f1": 0.7679,
-      "n_flagged": 68
+      "precision": 0.566,
+      "recall": 0.9677,
+      "f1": 0.7143,
+      "n_flagged": 53
     },
     {
       "threshold": 0.45,
-      "precision": 0.6324,
-      "recall": 0.9773,
-      "f1": 0.7679,
-      "n_flagged": 68
+      "precision": 0.566,
+      "recall": 0.9677,
+      "f1": 0.7143,
+      "n_flagged": 53
     },
     {
       "threshold": 0.5,
-      "precision": 0.9556,
-      "recall": 0.9773,
-      "f1": 0.9663,
-      "n_flagged": 45
+      "precision": 0.566,
+      "recall": 0.9677,
+      "f1": 0.7143,
+      "n_flagged": 53
     },
     {
       "threshold": 0.55,
-      "precision": 0.9556,
-      "recall": 0.9773,
-      "f1": 0.9663,
-      "n_flagged": 45
+      "precision": 0.566,
+      "recall": 0.9677,
+      "f1": 0.7143,
+      "n_flagged": 53
     },
     {
       "threshold": 0.6,
-      "precision": 0.9556,
-      "recall": 0.9773,
-      "f1": 0.9663,
-      "n_flagged": 45
+      "precision": 0.566,
+      "recall": 0.9677,
+      "f1": 0.7143,
+      "n_flagged": 53
     },
     {
       "threshold": 0.65,
-      "precision": 0.9556,
-      "recall": 0.9773,
-      "f1": 0.9663,
-      "n_flagged": 45
+      "precision": 0.549,
+      "recall": 0.9032,
+      "f1": 0.6829,
+      "n_flagged": 51
     },
     {
       "threshold": 0.7,
-      "precision": 0.9556,
-      "recall": 0.9773,
-      "f1": 0.9663,
-      "n_flagged": 45
+      "precision": 0.875,
+      "recall": 0.9032,
+      "f1": 0.8889,
+      "n_flagged": 32
     },
     {
       "threshold": 0.75,
-      "precision": 0.9556,
-      "recall": 0.9773,
-      "f1": 0.9663,
-      "n_flagged": 45
+      "precision": 0.875,
+      "recall": 0.9032,
+      "f1": 0.8889,
+      "n_flagged": 32
     },
     {
       "threshold": 0.8,
-      "precision": 0.9556,
-      "recall": 0.9773,
-      "f1": 0.9663,
-      "n_flagged": 45
+      "precision": 0.875,
+      "recall": 0.9032,
+      "f1": 0.8889,
+      "n_flagged": 32
     },
     {
       "threshold": 0.85,
-      "precision": 0.9556,
-      "recall": 0.9773,
-      "f1": 0.9663,
-      "n_flagged": 45
+      "precision": 0.875,
+      "recall": 0.9032,
+      "f1": 0.8889,
+      "n_flagged": 32
     },
     {
       "threshold": 0.9,
-      "precision": 0.9556,
-      "recall": 0.9773,
-      "f1": 0.9663,
-      "n_flagged": 45
+      "precision": 0.875,
+      "recall": 0.9032,
+      "f1": 0.8889,
+      "n_flagged": 32
     }
   ],
   "threshold_sweep_calibrated": [
     {
       "threshold": 0.1,
-      "precision": 0.6324,
-      "recall": 0.9773,
-      "f1": 0.7679,
-      "n_flagged": 68
+      "precision": 0.566,
+      "recall": 0.9677,
+      "f1": 0.7143,
+      "n_flagged": 53
     },
     {
       "threshold": 0.15,
-      "precision": 0.6324,
-      "recall": 0.9773,
-      "f1": 0.7679,
-      "n_flagged": 68
+      "precision": 0.549,
+      "recall": 0.9032,
+      "f1": 0.6829,
+      "n_flagged": 51
     },
     {
       "threshold": 0.2,
-      "precision": 0.9348,
-      "recall": 0.9773,
-      "f1": 0.9556,
-      "n_flagged": 46
+      "precision": 0.549,
+      "recall": 0.9032,
+      "f1": 0.6829,
+      "n_flagged": 51
     },
     {
       "threshold": 0.25,
-      "precision": 0.9556,
-      "recall": 0.9773,
-      "f1": 0.9663,
-      "n_flagged": 45
+      "precision": 0.875,
+      "recall": 0.9032,
+      "f1": 0.8889,
+      "n_flagged": 32
     },
     {
       "threshold": 0.3,
-      "precision": 0.9556,
-      "recall": 0.9773,
-      "f1": 0.9663,
-      "n_flagged": 45
+      "precision": 0.875,
+      "recall": 0.9032,
+      "f1": 0.8889,
+      "n_flagged": 32
     },
     {
       "threshold": 0.35,
-      "precision": 0.9556,
-      "recall": 0.9773,
-      "f1": 0.9663,
-      "n_flagged": 45
+      "precision": 0.875,
+      "recall": 0.9032,
+      "f1": 0.8889,
+      "n_flagged": 32
     },
     {
       "threshold": 0.4,
-      "precision": 0.9556,
-      "recall": 0.9773,
-      "f1": 0.9663,
-      "n_flagged": 45
+      "precision": 0.875,
+      "recall": 0.9032,
+      "f1": 0.8889,
+      "n_flagged": 32
     },
     {
       "threshold": 0.45,
-      "precision": 0.9556,
-      "recall": 0.9773,
-      "f1": 0.9663,
-      "n_flagged": 45
+      "precision": 0.875,
+      "recall": 0.9032,
+      "f1": 0.8889,
+      "n_flagged": 32
     },
     {
       "threshold": 0.5,
-      "precision": 0.9556,
-      "recall": 0.9773,
-      "f1": 0.9663,
-      "n_flagged": 45
+      "precision": 0.875,
+      "recall": 0.9032,
+      "f1": 0.8889,
+      "n_flagged": 32
     },
     {
       "threshold": 0.55,
-      "precision": 0.9556,
-      "recall": 0.9773,
-      "f1": 0.9663,
-      "n_flagged": 45
+      "precision": 0.875,
+      "recall": 0.9032,
+      "f1": 0.8889,
+      "n_flagged": 32
     },
     {
       "threshold": 0.6,
-      "precision": 0.9556,
-      "recall": 0.9773,
-      "f1": 0.9663,
-      "n_flagged": 45
+      "precision": 0.875,
+      "recall": 0.9032,
+      "f1": 0.8889,
+      "n_flagged": 32
     },
     {
       "threshold": 0.65,
-      "precision": 0.9556,
-      "recall": 0.9773,
-      "f1": 0.9663,
-      "n_flagged": 45
+      "precision": 0.875,
+      "recall": 0.9032,
+      "f1": 0.8889,
+      "n_flagged": 32
     },
     {
       "threshold": 0.7,
-      "precision": 0.9556,
-      "recall": 0.9773,
-      "f1": 0.9663,
-      "n_flagged": 45
+      "precision": 0.875,
+      "recall": 0.9032,
+      "f1": 0.8889,
+      "n_flagged": 32
     },
     {
       "threshold": 0.75,
-      "precision": 0.9556,
-      "recall": 0.9773,
-      "f1": 0.9663,
-      "n_flagged": 45
+      "precision": 0.875,
+      "recall": 0.9032,
+      "f1": 0.8889,
+      "n_flagged": 32
     },
     {
       "threshold": 0.8,
-      "precision": 0.9556,
-      "recall": 0.9773,
-      "f1": 0.9663,
-      "n_flagged": 45
+      "precision": 0.875,
+      "recall": 0.9032,
+      "f1": 0.8889,
+      "n_flagged": 32
     },
     {
       "threshold": 0.85,
-      "precision": 0.9556,
-      "recall": 0.9773,
-      "f1": 0.9663,
-      "n_flagged": 45
+      "precision": 0.871,
+      "recall": 0.871,
+      "f1": 0.871,
+      "n_flagged": 31
     },
     {
       "threshold": 0.9,
-      "precision": 0.9556,
-      "recall": 0.9773,
-      "f1": 0.9663,
-      "n_flagged": 45
+      "precision": 0.8966,
+      "recall": 0.8387,
+      "f1": 0.8667,
+      "n_flagged": 29
     }
   ],
-  "optimal_raw_threshold": 0.5,
+  "optimal_raw_threshold": 0.7,
   "optimal_calibrated_threshold": 0.25,
-  "default_threshold_is_optimal": true,
-  "f1_at_default_050": 0.9663,
-  "f1_at_optimal": 0.9663,
+  "default_threshold_is_optimal": false,
+  "f1_at_default_050": 0.7143,
+  "f1_at_optimal": 0.8889,
   "calibration_note": "Imbalance handling in Phase 4 = calibration + threshold selection ONLY. No retraining of the Isolation Forest or Transformer was performed. Both frozen model files (.pkl, .pt) remain read-only."
 }

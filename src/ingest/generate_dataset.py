@@ -425,8 +425,10 @@ class AttackInjector:
                 attack_events.extend(self._inject_credential_stuffing(victim_pool, campaign_date, campaign_num))
             elif attack_type == "low_and_slow_exfiltration":
                 attack_events.extend(self._inject_low_and_slow_exfiltration(user, campaign_date, campaign_num))
-                
+
         # Inject benign insider_drift edge cases (is_malicious=False)
+
+
         # Campaigns 1-5: original, Campaign 6: harder fan-out mimicking lateral_movement (G2)
         remaining = [p for p in self.profiles if p not in target_users]
         drift_users = random.sample(remaining, min(6, len(remaining)))
@@ -765,6 +767,8 @@ class AttackInjector:
             })
             
         return events
+
+
 
     def _inject_insider_drift(self, user: UserProfile, start_date: datetime, campaign_num: int) -> List[Dict]:
         """
