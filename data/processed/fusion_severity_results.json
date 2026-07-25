@@ -1,0 +1,81 @@
+{
+  "overall": {
+    "precision": 0.6708860759493671,
+    "recall": 1.0,
+    "f1": 0.803030303030303,
+    "pr_auc": 0.9549865036941265,
+    "roc_auc": 0.9989838973050931,
+    "normal_fp_count": 48,
+    "normal_fp_rate": 0.0152,
+    "n_normal_test": 3156,
+    "ls_recall": 1.0,
+    "it_recall": 1.0
+  },
+  "per_attack_type": {
+    "brute_force": {
+      "recall": 1.0,
+      "n_sessions": 3,
+      "n_flagged": 3,
+      "n_campaigns": 3,
+      "is_benign": false
+    },
+    "credential_misuse": {
+      "recall": 1.0,
+      "n_sessions": 3,
+      "n_flagged": 3,
+      "n_campaigns": 3,
+      "is_benign": false
+    },
+    "credential_stuffing": {
+      "recall": 1.0,
+      "n_sessions": 66,
+      "n_flagged": 66,
+      "n_campaigns": 3,
+      "is_benign": false
+    },
+    "device_spoofing": {
+      "recall": 1.0,
+      "n_sessions": 3,
+      "n_flagged": 3,
+      "n_campaigns": 3,
+      "is_benign": false
+    },
+    "impossible_travel": {
+      "recall": 1.0,
+      "n_sessions": 4,
+      "n_flagged": 4,
+      "n_campaigns": 4,
+      "is_benign": false
+    },
+    "insider_drift": {
+      "recall": 0.4,
+      "n_sessions": 10,
+      "n_flagged": 4,
+      "n_campaigns": 2,
+      "is_benign": true
+    },
+    "lateral_movement": {
+      "recall": 1.0,
+      "n_sessions": 3,
+      "n_flagged": 3,
+      "n_campaigns": 3,
+      "is_benign": false
+    },
+    "low_and_slow_exfiltration": {
+      "recall": 1.0,
+      "n_sessions": 24,
+      "n_flagged": 24,
+      "n_campaigns": 3,
+      "is_benign": false
+    },
+    "none": {
+      "recall": 0.0152,
+      "n_sessions": 3156,
+      "n_flagged": 48,
+      "n_campaigns": 1,
+      "is_benign": true
+    }
+  },
+  "isolation_verdict": "REAL SIDE EFFECT: FP count remains elevated even with fusion enabled. The auxiliary severity loss shifted how the classification head scores normal sessions.",
+  "threshold": 50
+}

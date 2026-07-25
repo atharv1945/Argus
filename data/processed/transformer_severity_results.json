@@ -1,0 +1,96 @@
+{
+  "overall": {
+    "precision": 0.7357142857142858,
+    "recall": 0.9716981132075472,
+    "f1": 0.8373983739837398,
+    "pr_auc": 0.9811974798764233,
+    "roc_auc": 0.9987544547610818,
+    "normal_fp_count": 33,
+    "normal_fp_rate": 0.0105,
+    "n_normal_test": 3156,
+    "threshold": 0.5
+  },
+  "per_attack_type": {
+    "brute_force": {
+      "recall": 1.0,
+      "n_sessions": 3,
+      "n_flagged": 3,
+      "n_campaigns": 3
+    },
+    "credential_misuse": {
+      "recall": 1.0,
+      "n_sessions": 3,
+      "n_flagged": 3,
+      "n_campaigns": 3
+    },
+    "credential_stuffing": {
+      "recall": 1.0,
+      "n_sessions": 66,
+      "n_flagged": 66,
+      "n_campaigns": 3
+    },
+    "device_spoofing": {
+      "recall": 1.0,
+      "n_sessions": 3,
+      "n_flagged": 3,
+      "n_campaigns": 3
+    },
+    "impossible_travel": {
+      "recall": 0.25,
+      "n_sessions": 4,
+      "n_flagged": 1,
+      "n_campaigns": 4
+    },
+    "insider_drift": {
+      "recall": 0.4,
+      "n_sessions": 10,
+      "n_flagged": 4,
+      "n_campaigns": 2
+    },
+    "lateral_movement": {
+      "recall": 1.0,
+      "n_sessions": 3,
+      "n_flagged": 3,
+      "n_campaigns": 3
+    },
+    "low_and_slow_exfiltration": {
+      "recall": 1.0,
+      "n_sessions": 24,
+      "n_flagged": 24,
+      "n_campaigns": 3
+    }
+  },
+  "gradient_check": {
+    "mean_spearman_r_ls_train": 0.9166666666666667,
+    "per_campaign": [
+      {
+        "campaign": "ATK_LS_20260604_001",
+        "n": 8,
+        "r_severity_head": 0.7619047619047621,
+        "r_cls_head": 0.07142857142857144,
+        "p": 0.028004939153071794
+      },
+      {
+        "campaign": "ATK_LS_20260604_002",
+        "n": 8,
+        "r_severity_head": 0.9761904761904763,
+        "r_cls_head": -0.4285714285714286,
+        "p": 3.3143960262001043e-05
+      },
+      {
+        "campaign": "ATK_LS_20260604_006",
+        "n": 8,
+        "r_severity_head": 1.0,
+        "r_cls_head": 0.8728715609439694,
+        "p": 0.0
+      },
+      {
+        "campaign": "ATK_LS_20260610_005",
+        "n": 8,
+        "r_severity_head": 0.9285714285714287,
+        "r_cls_head": -0.11904761904761905,
+        "p": 0.0008629681828999769
+      }
+    ]
+  }
+}

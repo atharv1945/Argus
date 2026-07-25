@@ -25,6 +25,100 @@ import yaml
 from faker import Faker
 
 # -----------------------------------------------------------------------------
+# Severity helpers
+# -----------------------------------------------------------------------------
+
+def _severity(val: float, lo: float, hi: float) -> float:
+    """Map val from [lo, hi] to [0.0, 1.0], clamped."""
+    if hi <= lo:
+        return 0.5
+    return float(min(max((val - lo) / (hi - lo), 0.0), 1.0))
+
+
+def _add_session_severity(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Compute per-session 0-1 severity scores from the natural magnitude feature
+    for each malicious attack type.  Normal / insider_drift sessions keep 0.0.
+
+    Attack-type → magnitude feature (rationale):
+      brute_force          : failure_count in session  (campaign intensity)
+      credential_stuffing  : failure_count in campaign (# victim accounts targeted)
+      credential_misuse    : bytes_total in session    (data volume exfiltrated)
+      lateral_movement     : bytes_total in session    (data moved across hops)
+      low_and_slow_exfil.  : bytes_total per session   (log-scaled, session-level)
+      impossible_travel    : bytes_total of malicious  (0 for device-only variant)
+      device_spoofing      : fixed 0.5                 (no natural magnitude variation)
+    """
+    df = df.copy()
+    df["severity"] = 0.0
+
+    sev_col_idx = df.columns.get_loc("severity")
+
+    malicious_types = [
+        "brute_force", "credential_stuffing", "credential_misuse",
+        "lateral_movement", "low_and_slow_exfiltration",
+        "impossible_travel", "device_spoofing",
+    ]
+
+    for attack_type in malicious_types:
+        atk_df = df[df["attack_type"] == attack_type]
+        if atk_df.empty:
+            continue
+
+        if attack_type == "device_spoofing":
+            # Fixed magnitude — no variation exists in the generator
+            df.loc[atk_df.index, "severity"] = 0.5
+            continue
+
+        for camp_id, camp_grp in atk_df.groupby("attack_instance_id"):
+            camp_idx = camp_grp.index
+
+            if attack_type == "brute_force":
+                # fail_count range 15–30 (from config)
+                fail_count = int((camp_grp["status"] == "FAILURE").sum())
+                sev = _severity(fail_count, 15, 30)
+                df.loc[camp_idx, "severity"] = sev
+
+            elif attack_type == "credential_stuffing":
+                # fail_count range 20–30 across all sessions in this campaign
+                fail_count = int((camp_grp["status"] == "FAILURE").sum())
+                sev = _severity(fail_count, 20, 30)
+                df.loc[camp_idx, "severity"] = sev
+
+            elif attack_type == "credential_misuse":
+                # bytes_total range: 4*15M = 60M  to  8*80M = 640M
+                bytes_total = int(camp_grp["bytes_transferred"].sum())
+                sev = _severity(bytes_total, 60_000_000, 640_000_000)
+                df.loc[camp_idx, "severity"] = sev
+
+            elif attack_type == "lateral_movement":
+                # hop bytes range: 7*1M = 7M  to  7*10M = 70M
+                bytes_total = int(camp_grp["bytes_transferred"].sum())
+                sev = _severity(bytes_total, 7_000_000, 70_000_000)
+                df.loc[camp_idx, "severity"] = sev
+
+            elif attack_type == "impossible_travel":
+                # ITSC variant: bytes 2M–15M; original IT: 0 bytes → use 0.5
+                bytes_total = int(camp_grp["bytes_transferred"].sum())
+                if bytes_total > 0:
+                    sev = _severity(bytes_total, 2_000_000, 15_000_000)
+                else:
+                    sev = 0.5
+                df.loc[camp_idx, "severity"] = sev
+
+            elif attack_type == "low_and_slow_exfiltration":
+                # Severity is SESSION-level (each step has different bytes_tx)
+                # log-scale: 100K (step-0 min) to 100M (step-7 max estimate)
+                log_lo = math.log(100_000)
+                log_hi = math.log(100_000_000)
+                for sess_id, sess_grp in camp_grp.groupby("session_id"):
+                    bytes_tx = int(sess_grp["bytes_transferred"].sum())
+                    sev = _severity(math.log(max(bytes_tx, 1)), log_lo, log_hi)
+                    df.loc[sess_grp.index, "severity"] = sev
+
+    return df
+
+# -----------------------------------------------------------------------------
 # Configuration
 # -----------------------------------------------------------------------------
 
@@ -1224,6 +1318,13 @@ def generate_dataset(config: GeneratorConfig) -> Tuple[pd.DataFrame, str]:
     df = pd.DataFrame(all_events)
     df["timestamp"] = pd.to_datetime(df["timestamp"])
     df = df.sort_values(by="timestamp").reset_index(drop=True)
+
+    # ── Add graded severity label (0-1, per attack type natural magnitude) ──
+    print("[*] Computing per-session severity labels...")
+    df = _add_session_severity(df)
+    sev_stats = df[df["is_malicious"] == True].groupby("attack_type")["severity"].agg(["mean", "std", "min", "max"])
+    print("    Severity stats per attack type (malicious sessions only):")
+    print(sev_stats.to_string())
 
     os.makedirs(config.output_dir, exist_ok=True)
     parquet_path = os.path.join(config.output_dir, "full_dataset.parquet")

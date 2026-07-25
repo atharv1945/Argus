@@ -168,6 +168,9 @@ def build_session_features(df: pd.DataFrame) -> pd.DataFrame:
         non_none_ids = grp.loc[grp["attack_instance_id"] != "none", "attack_instance_id"]
         attack_instance_id = non_none_ids.values[0] if len(non_none_ids) > 0 else "none"
 
+        # Session-level severity (0-1 graded label added by generate_dataset)
+        session_severity = float(grp["severity"].max()) if "severity" in grp.columns else 0.0
+
         rows.append({
             "session_id":             sess_id,
             "entity_id":              entity_id,
@@ -212,6 +215,8 @@ def build_session_features(df: pd.DataFrame) -> pd.DataFrame:
             "is_malicious":           is_malicious,
             "attack_type":            attack_type,
             "attack_instance_id":     attack_instance_id,
+            # Graded severity label (0.0 for normal/insider_drift)
+            "severity":               session_severity,
         })
 
     sf = pd.DataFrame(rows)

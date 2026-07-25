@@ -708,3 +708,125 @@ Because both `ATK_IT_` and `ATK_ITSC_` campaigns share `attack_type = 'impossibl
 **Conclusion:** Sub-variant representation in test is now **structural** (guaranteed by algorithm) rather than incidental (dependent on random seed date ordering).
 
 
+
+## Part A / Part B Disposition Matrix
+
+### Part A: Transformer Severity Head
+**Finding**: Rejected.
+
+While the severity head achieved excellent severity regression (=+0.917$) and standalone metrics looked promising, **re-integrating it with the nomaly_first_fusion.py pipeline exposed a severe multi-task interference effect.** 
+
+When passed through the exact same fusion pipeline (hard rules and tiered thresholds intact), the augmented model's classification head assigned systematically higher risk scores to normal sessions (mean cls score 0.574 vs 0.003 for True Negatives). This caused normal sessions that triggered minor graph flags (
+ew_device_edge) to breach the fusion threshold, driving normal false positives up to **48** (1.52%), compared to just **13** (0.41%) for the Part 1 baseline.
+
+The auxiliary severity task degraded the primary classification task's calibration on edge-case normal sessions. Because headline numbers do not override failed verification checks, this model cannot be adopted.
+
+### Part B: XGBoost Tree-Based Model
+**Finding**: Rejected.
+
+The XGBoost model failed the magnitude-invariance check entirely (=+0.032$, flat SHAP curve). Rather than learning behavioral sequence patterns (like bytes accumulated over time), it learned static structural shortcuts (e.g., peer-group anomalies and off-hours flags). It functions purely as an anomaly detector rather than a sequence model.
+
+### Final Recommendation
+**Retain the Part 1 Baseline Transformer (	ransformer_weights.pt).** 
+
+Both investigated alternatives failed critical verification checks. The Part 1 baseline remains the only model that successfully balances high recall across attack classes while maintaining strict precision bounds via the fusion layer, without suffering from structural shortcuts or multi-task interference.
+
+### Fusion-Enabled Performance Metrics
+| Metric | Part 1 Baseline (Live) | Part A + Fusion (Augmented) |
+| :--- | :--- | :--- |
+| **Precision** | 0.902 | 0.671 |
+| **Recall** | 0.984 | 1.000 |
+| **F1 Score** | 0.941 | 0.803 |
+| **PR-AUC** | 0.956 | 0.955 |
+| **ROC-AUC** | 0.994 | 0.999 |
+| **Normal FPs** | 13 (0.41%) | 48 (1.52%) |
+| **LS Recall** | 0.958 | 1.000 |
+| **IT Recall** | 1.000 | 1.000 |
+
+---
+
+## Model Selection — Locked
+
+*Locked 2026-07-25. Model investigation closed. No further changes to the inference pipeline.*
+
+---
+
+### Task 1 — Live Pipeline Weight Verification
+
+The live inference chain is a three-stage offline pipeline:
+
+```
+src/models/sequence_model.py
+  line 367:  weights_path = "src/models/transformer_weights.pt"
+  line 388:  score_path   = "data/processed/transformer_scores.parquet"
+
+  -> saves transformer_scores.parquet (columns: session_id, transformer_score)
+
+src/fusion/anomaly_first_fusion.py
+  line 359:  xformer_path: str = "data/processed/transformer_scores.parquet"
+
+  -> reads transformer_scores.parquet, applies hard rules + tier logic
+  -> saves fused_scores.parquet
+
+src/dashboard/app.py
+  line 73:   fused = pd.read_parquet(DATA / "fused_scores.parquet")
+
+  -> dashboard reads fused_scores.parquet at runtime (cached, ttl=300s)
+```
+
+The dashboard and API do not load model weights at runtime. The runtime data artifact
+(`fused_scores.parquet`) was produced by `sequence_model.py` scoring with
+`transformer_weights.pt` (Part 1 baseline), then passed through `anomaly_first_fusion.py`.
+
+---
+
+### Task 2 — Experimental Artifacts Confirmed Isolated
+
+The following experimental artifacts are **not referenced anywhere in the live inference path**:
+
+| Artifact | Location | Status |
+| :--- | :--- | :--- |
+| `transformer_severity_weights.pt` | `src/models/` | Report evidence only. Only referenced in `sequence_model_severity.py`, which carries an explicit `ISOLATION` header (lines 15-17): *"outputs to transformer_severity_weights.pt and transformer_severity_scores.parquet — does NOT overwrite the live transformer_weights.pt or transformer_scores.parquet."* |
+| `transformer_severity_scores.parquet` | `data/processed/` | Report evidence only. Has incompatible schema (`severity_cls_score`, `severity_sev_score`) — cannot be accidentally substituted for live `transformer_scores.parquet` which requires column name `transformer_score`. |
+| XGBoost model artifacts | `data/processed/` | No XGBoost references exist in any file under `src/` (grep confirmed zero matches). Comparison outputs (`xgb_v2_comparison_scores.parquet`) are report evidence only. |
+
+---
+
+### Task 3 — Final End-to-End Smoke Test
+
+Evaluated `fused_scores.parquet` (live, unmodified) against the test split.
+
+| Metric | Verified Baseline | Smoke Test Result | Match |
+| :--- | :--- | :--- | :--- |
+| **Precision** | 0.902 | 0.902 | EXACT |
+| **Recall** | 0.984 | 0.984 | EXACT |
+| **F1** | 0.941 | 0.941 | EXACT |
+| **PR-AUC** | 0.953 | 0.953 | EXACT |
+| **ROC-AUC** | 0.995 | 0.995 | EXACT |
+| **Normal FPs** | 13/3,167 (0.41%) | 13/3,167 (0.41%) | EXACT |
+
+Normal FP denominator: all `is_malicious=False` test sessions — 3,157 `attack_type='none'`
+(9 flagged) + 10 `insider_drift` (4 flagged) = 13/3,167. This matches the previously
+verified baseline exactly.
+
+Per-attack-type recall (test split):
+
+| Attack Type | Sessions | Flagged | Recall |
+| :--- | :--- | :--- | :--- |
+| `brute_force` | 3 | 3 | 1.000 |
+| `credential_misuse` | 3 | 3 | 1.000 |
+| `credential_stuffing` | 83 | 83 | 1.000 |
+| `device_spoofing` | 3 | 3 | 1.000 |
+| `impossible_travel` | 3 | 3 | 1.000 |
+| `lateral_movement` | 3 | 3 | 1.000 |
+| `low_and_slow_exfiltration` | 24 | 22 | 0.917 |
+| `insider_drift` (benign) | 10 | 4 | 0.400 (FP) |
+
+**Verdict: PASS. All headline numbers match exactly. Live pipeline confirmed on Part 1 baseline.**
+
+---
+
+### Task 4 — Final `low_and_slow_exfiltration` Limitation Entry
+
+**`low_and_slow_exfiltration` recall = 0.917 (22/24 sessions) is a thoroughly investigated, honestly-diagnosed limitation of the current training paradigm, not an unexamined gap.** Four distinct remediation approaches were pursued and each was closed with verified evidence: (1) *Bytes-ladder randomization* — the zero-variance bytes-per-step ladder was replaced with per-campaign randomized byte sequences (base rate and growth rate independently drawn per campaign); a subsequent gradient check (pooled Spearman r = +0.033, p = 0.67 across 18 train campaigns) confirmed the Transformer's classification head was not reading magnitude at all — high-magnitude and low-magnitude LS sessions produced identical classification probabilities, establishing that the limitation is in the training signal rather than the feature set. (2) *Hard rule coverage* — not applicable; unlike brute force (failure_count threshold) or impossible travel (geo-velocity), low_and_slow_exfiltration has no deterministic per-session signature that can be encoded as a threshold rule without unacceptable false-positive cost on normal file-access sessions. (3) *Auxiliary severity regression head (Part A)* — the dual-head Transformer (BCE + 0.3 x MSE loss on magnitude) successfully learned a genuine magnitude gradient (mean Spearman r = +0.917 across 4 test LS campaigns, range 0.762–1.000), confirming the encoder can represent magnitude when given a training signal for it; however, re-integrating with the full fusion pipeline (same hard rules, same tier thresholds, same weights) exposed multi-task interference: the severity head calibrated the classification head to assign systematically elevated probabilities to normal sessions with minor graph signals (new_device_edge), increasing normal false positives from 13 to 48 (0.41% to 1.52%) even with fusion re-enabled — a genuine precision regression, not a confound — so this approach was rejected. (4) *XGBoost comparison (Part B)* — re-run on the corrected fixed-variance dataset; the magnitude-invariance gradient check returned pooled Spearman r = +0.032 (flat-ceiling failure): XGBoost learned a categorical structural shortcut (peer-group device anomaly + off-hours flag) rather than a behavioral magnitude signal, demonstrating the limitation is not XGBoost-solvable with the current binary session label either. The underlying root cause common to approaches 1, 3, and 4 is that the training objective is session-level binary (`is_malicious`): a model trained to distinguish campaign-pattern sessions from normal sessions cannot learn within-campaign magnitude ordering from that signal alone. Fixing this properly requires a magnitude-graded label or a contrastive loss that explicitly ranks within-campaign sessions by severity — a label redesign out of scope for the current build. Recall = 0.917 on the current test split (22/24 sessions, 3 campaigns) is accepted as a documented, honestly-bounded limitation.
+

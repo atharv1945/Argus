@@ -1,18 +1,18 @@
 {
   "overall": {
-    "precision": 0.43010752688172044,
+    "precision": 0.39849624060150374,
     "recall": 1.0,
-    "f1": 0.6015037593984962,
-    "pr_auc": 0.9832154314390381,
-    "roc_auc": 0.9993437697659708,
-    "threshold": -0.041772008816811514,
-    "n_test_sessions": 3282,
-    "n_malicious_test": 120
+    "f1": 0.5698924731182796,
+    "pr_auc": 0.9772195672405795,
+    "roc_auc": 0.9992133398491043,
+    "threshold": -0.04259540680026504,
+    "n_test_sessions": 3272,
+    "n_malicious_test": 106
   },
   "per_attack_type": {
     "brute_force": {
       "recall": 1.0,
-      "pr_auc": 0.1113,
+      "pr_auc": 0.1497,
       "n_sessions_this_type": 3,
       "n_flagged_sessions": 3,
       "n_campaigns_in_test": 3,
@@ -30,9 +30,9 @@
     },
     "credential_stuffing": {
       "recall": 1.0,
-      "pr_auc": 0.9859,
-      "n_sessions_this_type": 78,
-      "n_flagged_sessions": 78,
+      "pr_auc": 0.9858,
+      "n_sessions_this_type": 66,
+      "n_flagged_sessions": 66,
       "n_campaigns_in_test": 3,
       "is_benign_edge_case": false,
       "note": "recall & PR-AUC vs normal traffic"
@@ -48,10 +48,10 @@
     },
     "impossible_travel": {
       "recall": 1.0,
-      "pr_auc": 1.0,
-      "n_sessions_this_type": 6,
-      "n_flagged_sessions": 6,
-      "n_campaigns_in_test": 6,
+      "pr_auc": 0.6981,
+      "n_sessions_this_type": 4,
+      "n_flagged_sessions": 4,
+      "n_campaigns_in_test": 4,
       "is_benign_edge_case": false,
       "note": "recall & PR-AUC vs normal traffic"
     },
@@ -75,7 +75,7 @@
     },
     "low_and_slow_exfiltration": {
       "recall": 1.0,
-      "pr_auc": 0.9043,
+      "pr_auc": 0.9214,
       "n_sessions_this_type": 24,
       "n_flagged_sessions": 24,
       "n_campaigns_in_test": 3,
@@ -113,9 +113,9 @@
     "total_drift_test_sessions": 10,
     "drift_flagged_as_anomaly": 10,
     "drift_false_positive_rate": 1.0,
-    "drift_mean_score": 0.01200912720698688,
-    "normal_mean_score": -0.10214055128134056,
-    "malicious_mean_score": 0.07548869662379246,
+    "drift_mean_score": 0.02198210015420763,
+    "normal_mean_score": -0.10146713109477407,
+    "malicious_mean_score": 0.07463594153180088,
     "note": "insider_drift sessions are BENIGN (is_malicious=False). Flagging them counts against precision."
   }
 }

@@ -1,0 +1,64 @@
+{
+  "overall": {
+    "precision": 0.8907563025210085,
+    "recall": 1.0,
+    "f1": 0.9422222222222222,
+    "pr_auc": 0.9980561668775005,
+    "roc_auc": 0.9999284854408277,
+    "normal_fp_count": 3,
+    "normal_fp_rate": 0.001,
+    "n_normal_test": 3156
+  },
+  "per_attack_type": {
+    "brute_force": {
+      "recall": 1.0,
+      "n_sessions": 3,
+      "n_campaigns": 3
+    },
+    "credential_misuse": {
+      "recall": 1.0,
+      "n_sessions": 3,
+      "n_campaigns": 3
+    },
+    "credential_stuffing": {
+      "recall": 1.0,
+      "n_sessions": 66,
+      "n_campaigns": 3
+    },
+    "device_spoofing": {
+      "recall": 1.0,
+      "n_sessions": 3,
+      "n_campaigns": 3
+    },
+    "impossible_travel": {
+      "recall": 1.0,
+      "n_sessions": 4,
+      "n_campaigns": 4
+    },
+    "insider_drift": {
+      "recall": 1.0,
+      "n_sessions": 10,
+      "n_campaigns": 2
+    },
+    "lateral_movement": {
+      "recall": 1.0,
+      "n_sessions": 3,
+      "n_campaigns": 3
+    },
+    "low_and_slow_exfiltration": {
+      "recall": 1.0,
+      "n_sessions": 24,
+      "n_campaigns": 3
+    }
+  },
+  "gradient_check": {
+    "mean_spearman_r": 0.03186221148705437,
+    "flat_ceiling": true,
+    "verdict": "FAIL - flat ceiling",
+    "per_campaign": [
+      {
+        "campaign": "ATK_LS_20260604_001",
+        "n": 8,
+        "r": 0.4761904761904762,
+        "p": 0.23293553465009798,
+        "prob_min": 
