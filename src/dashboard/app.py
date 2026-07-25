@@ -678,16 +678,23 @@ def render_header_bar(active_cases: int, tier1_count: int):
 
 
 def render_kpi_cards(cases: pd.DataFrame, fused: pd.DataFrame,
-                     results: dict, drift_level: str, drift_color: str):
-    test_cases    = cases[cases["split"] == "test"]
-    flagged       = test_cases[test_cases["max_fused_risk_score"] >= 50]
+                     results: dict, drift_level: str, drift_color: str, split_filter: str = "test"):
+    target_cases  = cases if split_filter == "all" else cases[cases["split"] == split_filter]
+    flagged       = target_cases[target_cases["max_fused_risk_score"] >= 50]
     tier1_count   = int((flagged["tier_1_count"] > 0).sum())
-    test_sessions = fused[fused["split"] == "test"]
-    norm_test     = test_sessions[~test_sessions["is_malicious"]]
-    fp_count      = int((norm_test["fused_risk_score"] >= 50).sum())
-    fp_rate       = fp_count / max(len(norm_test), 1)
-    prec          = results["overall"]["precision"]
-    rec           = results["overall"]["recall"]
+    
+    target_sessions = fused if split_filter == "all" else fused[fused["split"] == split_filter]
+    norm_target   = target_sessions[~target_sessions["is_malicious"]]
+    fp_count      = int((norm_target["fused_risk_score"] >= 50).sum())
+    fp_rate       = fp_count / max(len(norm_target), 1)
+    
+    mal_target    = target_sessions[target_sessions["is_malicious"]]
+    tp_count      = int((mal_target["fused_risk_score"] >= 50).sum())
+    fn_count      = len(mal_target) - tp_count
+    
+    prec = tp_count / max(tp_count + fp_count, 1) if (tp_count + fp_count) > 0 else 0.0
+    rec  = tp_count / max(tp_count + fn_count, 1) if (tp_count + fn_count) > 0 else 0.0
+    f1   = 2 * prec * rec / (prec + rec) if (prec + rec) > 0 else 0.0
 
     drift_class = {"NONE": "green", "MODERATE": "amber", "SIGNIFICANT": "red"}.get(drift_level, "muted")
     drift_icon  = {"NONE": "✅", "MODERATE": "⚠️", "SIGNIFICANT": "🚨"}.get(drift_level, "ℹ️")
@@ -696,8 +703,8 @@ def render_kpi_cards(cases: pd.DataFrame, fused: pd.DataFrame,
 <div class="kpi-row">
   <div class="kpi-card accent">
     <div class="kpi-label">Sessions Monitored</div>
-    <div class="kpi-value">{len(test_sessions):,}</div>
-    <div class="kpi-sub">test split</div>
+    <div class="kpi-value">{len(target_sessions):,}</div>
+    <div class="kpi-sub">{split_filter} split</div>
   </div>
   <div class="kpi-card red">
     <div class="kpi-label">Active Tier 1 Alerts</div>
@@ -707,12 +714,12 @@ def render_kpi_cards(cases: pd.DataFrame, fused: pd.DataFrame,
   <div class="kpi-card amber">
     <div class="kpi-label">Normal FP Rate</div>
     <div class="kpi-value" style="color:{TIER2_COLOR if fp_rate > 0.01 else TIER3_COLOR};">{fp_rate:.2%}</div>
-    <div class="kpi-sub">{fp_count} / {len(norm_test):,} normal sessions</div>
+    <div class="kpi-sub">{fp_count} / {len(norm_target):,} normal sessions</div>
   </div>
   <div class="kpi-card green">
     <div class="kpi-label">Detection Recall</div>
     <div class="kpi-value" style="color:{TIER3_COLOR};">{rec:.3f}</div>
-    <div class="kpi-sub">Precision {prec:.3f} · F1 {(2*prec*rec/(prec+rec)):.3f}</div>
+    <div class="kpi-sub">Precision {prec:.3f} · F1 {f1:.3f}</div>
   </div>
   <div class="kpi-card {drift_class}">
     <div class="kpi-label">Drift Status</div>
@@ -880,7 +887,7 @@ def main():
 
         st.markdown("<div class='section-title'>Filters</div>", unsafe_allow_html=True)
         split_filter = st.selectbox("Data split", ["test", "train", "all"], index=0)
-        show_benign  = st.checkbox("Include unalerted cases", value=False)
+        show_benign  = st.checkbox("Show unalerted cases in Queue", value=False, help="Include normal cases (risk < 50) in the Alert Queue below")
 
         all_types = ["All"] + sorted(
             cases[cases["split"] == split_filter if split_filter != "all" else cases.index.notna()]
@@ -919,15 +926,15 @@ def main():
     view_cases = view_cases.sort_values("max_fused_risk_score", ascending=False).reset_index(drop=True)
 
     # ── Computed stats for header ─────────────────────────────────────────────
-    test_cases  = cases[cases["split"] == "test"]
-    flagged     = test_cases[test_cases["max_fused_risk_score"] >= 50]
-    tier1_total = int((flagged["tier_1_count"] > 0).sum())
+    target_cases = cases if split_filter == "all" else cases[cases["split"] == split_filter]
+    flagged      = target_cases[target_cases["max_fused_risk_score"] >= 50]
+    tier1_total  = int((flagged["tier_1_count"] > 0).sum())
 
     # ── Header bar ────────────────────────────────────────────────────────────
     render_header_bar(active_cases=len(flagged), tier1_count=tier1_total)
 
     # ── KPI row ───────────────────────────────────────────────────────────────
-    render_kpi_cards(cases, fused, results, drift_level, drift_color)
+    render_kpi_cards(cases, fused, results, drift_level, drift_color, split_filter)
 
     # ── Main tabs ─────────────────────────────────────────────────────────────
     tab_queue, tab_analytics, tab_feedback = st.tabs([
