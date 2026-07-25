@@ -7,24 +7,24 @@
 | Metric | Value |
 |--------|-------|
 | Threshold | 50 / 100 |
-| Total test sessions | 3,289 |
-| Malicious sessions | 122 |
-| Normal sessions | 3,167 |
-| Precision | 0.9023 |
-| Recall | 0.9836 |
-| F1 | 0.9412 |
-| PR-AUC | 0.9532 |
-| ROC-AUC | 0.9947 |
+| Total test sessions | 3,272 |
+| Malicious sessions | 106 |
+| Normal sessions | 3,166 |
+| Precision | 0.6667 |
+| Recall | 1.0000 |
+| F1 | 0.8000 |
+| PR-AUC | 0.9508 |
+| ROC-AUC | 0.9988 |
 | Precision@top-1% | 1.0000 |
-| Precision@top-3% | 0.9592 |
-| Precision@top-5% | 0.7378 |
+| Precision@top-3% | 0.9082 |
+| Precision@top-5% | 0.6503 |
 
 ## Tier Distribution (Test Flagged Sessions)
 
 | Tier | Count | Description |
 |------|-------|-------------|
-| 1 (Hard rules) | 105 | fp_mismatch / geo_velocity → 90–100 |
-| 2 (Graph-boosted) | 28 | lateral/relational evidence → 55–89 |
+| 1 (Hard rules) | 88 | fp_mismatch / geo_velocity → 90–100 |
+| 2 (Graph-boosted) | 71 | lateral/relational evidence → 55–89 |
 | 3 (Model-driven) | 0 | IF + Transformer blend → 0–54 |
 
 ## Per-Attack-Type Recall
@@ -33,17 +33,17 @@
 |-------------|--------------|---------|--------|
 | brute_force | 3 | 3 | 1.0000 |
 | credential_misuse | 3 | 3 | 1.0000 |
-| credential_stuffing | 83 | 83 | 1.0000 |
+| credential_stuffing | 66 | 66 | 1.0000 |
 | device_spoofing | 3 | 3 | 1.0000 |
-| impossible_travel | 3 | 3 | 1.0000 |
+| impossible_travel | 4 | 4 | 1.0000 |
 | lateral_movement | 3 | 3 | 1.0000 |
-| low_and_slow_exfiltration | 24 | 22 | 0.9167 |
+| low_and_slow_exfiltration | 24 | 24 | 1.0000 |
 
 ## Hard-Rule Coverage (Tier 1 Targets)
 
 | Attack Type | Total | Tier-1 | Flagged | Recall | Tier-1 Rate |
 |-------------|-------|--------|---------|--------|-------------|
-| impossible_travel | 3 | 3 | 3 | 1.0000 | 1.0000 |
+| impossible_travel | 4 | 4 | 4 | 1.0000 | 1.0000 |
 | device_spoofing | 3 | 3 | 3 | 1.0000 | 1.0000 |
 
 ## Insider Drift — False Positive Rate
@@ -53,16 +53,16 @@
 | Total insider_drift test sessions | 10 |
 | Flagged (FP) | 4 |
 | FPR | 0.4 |
-| Mean fused score | 27.6 |
-| Max fused score | 57 |
+| Mean fused score | 36.9 |
+| Max fused score | 80 |
 
 ## Rule Classifier Accuracy
 
 | Metric | Value |
 |--------|-------|
-| Total malicious test sessions | 122 |
-| Correctly labeled | 106 |
-| Accuracy | 0.8689 |
+| Total malicious test sessions | 106 |
+| Correctly labeled | 90 |
+| Accuracy | 0.8491 |
 
 ## Key Observations
 

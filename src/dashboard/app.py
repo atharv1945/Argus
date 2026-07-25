@@ -391,24 +391,33 @@ def load_feedback() -> pd.DataFrame:
 # Subgraph (matplotlib — dark themed)
 # ─────────────────────────────────────────────────────────────────────────────
 
-def build_entity_subgraph(entity_id, g, raw, session_ids) -> nx.DiGraph:
+def build_entity_subgraph(sel_cases: pd.DataFrame, g, raw: pd.DataFrame) -> nx.DiGraph:
     sub = nx.DiGraph()
-    entity_events = raw[(raw["entity_id"] == entity_id) & (raw["session_id"].isin(session_ids))]
-    sub.add_node(entity_id, ntype="entity", label=entity_id)
-    for _, row in entity_events.iterrows():
-        dev = row.get("device_id", "")
-        res = row.get("resource_id", "")
-        if dev:
-            sub.add_node(dev, ntype="device", label=str(dev)[:18])
-            sub.add_edge(entity_id, dev, etype="uses_device")
-        if res and row.get("event_type") not in ("logon", "logoff"):
-            sub.add_node(res, ntype="resource", label=str(res)[:18])
-            sub.add_edge(dev or entity_id, res, etype="accesses")
+    target_entities = set()
+    
+    for _, sel_case in sel_cases.iterrows():
+        entity_id = sel_case["entity_id"]
+        target_entities.add(entity_id)
+        session_ids = list(sel_case["all_session_ids"])
+        
+        entity_events = raw[(raw["entity_id"] == entity_id) & (raw["session_id"].isin(session_ids))]
+        sub.add_node(entity_id, ntype="entity", label=entity_id)
+        
+        for _, row in entity_events.iterrows():
+            dev = row.get("device_id", "")
+            res = row.get("resource_id", "")
+            if pd.notna(dev) and dev:
+                sub.add_node(dev, ntype="device", label=str(dev)[:18])
+                sub.add_edge(entity_id, dev, etype="uses_device")
+            if pd.notna(res) and res and row.get("event_type") not in ("logon", "logoff"):
+                sub.add_node(res, ntype="resource", label=str(res)[:18])
+                sub.add_edge(dev or entity_id, res, etype="accesses")
+                
     touched_devs = [n for n, d in sub.nodes(data=True) if d.get("ntype") == "device"]
     for dev in touched_devs:
         if dev in g.G:
             for pred in g.G.predecessors(dev):
-                if pred != entity_id and g.G.nodes.get(pred, {}).get("ntype") == "entity":
+                if pred not in target_entities and g.G.nodes.get(pred, {}).get("ntype") == "entity":
                     sub.add_node(pred, ntype="entity_other", label=str(pred)[:14])
                     sub.add_edge(pred, dev, etype="shared_device")
     return sub
@@ -835,19 +844,6 @@ def render_drilldown(sel_case, fused: pd.DataFrame, raw: pd.DataFrame):
             write_feedback(case_id, eid, atk, "FALSE_POSITIVE", note_input)
             st.warning("Marked False Positive ❌")
 
-    # ── Subgraph
-    st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
-    st.markdown("<div class='section-title'>Entity Subgraph</div>", unsafe_allow_html=True)
-    with st.spinner("Building subgraph…"):
-        try:
-            g   = load_graph()
-            sub = build_entity_subgraph(eid, g, raw, all_ids)
-            fig = draw_subgraph(sub, title=f"{eid} — {sub.number_of_nodes()} nodes, {sub.number_of_edges()} edges")
-            st.pyplot(fig, width='stretch')
-            st.caption("🔴 Target entity · 🟠 Co-using entity · 🔵 Device · 🟢 Resource")
-        except Exception as e:
-            st.error(f"Subgraph error: {e}")
-
     # ── Session table
     st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
     st.markdown("<div class='section-title'>Session Details</div>", unsafe_allow_html=True)
@@ -989,6 +985,25 @@ def main():
             )
 
             if selected_rows:
+                sel_cases_df = view_cases.iloc[selected_rows]
+                
+                # ── COMBINED SUBGRAPH ──
+                st.markdown("<div class='section-title'>Combined Entity Subgraph</div>", unsafe_allow_html=True)
+                with st.spinner("Building combined subgraph…"):
+                    try:
+                        g   = load_graph()
+                        sub = build_entity_subgraph(sel_cases_df, g, raw)
+                        title = "Combined Graph" if len(selected_rows) > 1 else f"{sel_cases_df.iloc[0]['entity_id']} Graph"
+                        title += f" — {sub.number_of_nodes()} nodes, {sub.number_of_edges()} edges"
+                        fig = draw_subgraph(sub, title=title)
+                        st.pyplot(fig, width='stretch')
+                        st.caption("🔴 Target entity · 🟠 Co-using entity · 🔵 Device · 🟢 Resource")
+                    except Exception as e:
+                        st.error(f"Subgraph error: {e}")
+                
+                st.markdown("<hr style='border:1px solid #1F2937; margin: 30px 0;'/>", unsafe_allow_html=True)
+                
+                # ── CASE DETAILS ──
                 for i, sel_idx in enumerate(selected_rows):
                     sel_case = view_cases.iloc[sel_idx]
                     st.markdown(
