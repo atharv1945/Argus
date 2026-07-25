@@ -253,6 +253,9 @@ html, body, [class*="css"] {{
     white-space: pre-wrap;
     color: #D1D5DB;
     line-height: 1.6;
+    max-height: 200px;
+    overflow-y: auto;
+    resize: vertical;
 }}
 
 /* ---- Case summary table ---- */
@@ -961,12 +964,12 @@ def main():
                 unsafe_allow_html=True,
             )
 
-            # Clickable dataframe (Streamlit ≥1.35 single-row selection)
+            # Clickable dataframe (Streamlit ≥1.35 multi-row selection)
             event = st.dataframe(
                 queue_display,
                 width="stretch",
                 height=520,
-                selection_mode="single-row",
+                selection_mode="multi-row",
                 on_select="rerun",
                 key="alert_queue_table",
                 column_config={
@@ -989,14 +992,16 @@ def main():
             )
 
             if selected_rows:
-                sel_idx  = selected_rows[0]
-                sel_case = view_cases.iloc[sel_idx]
-                st.markdown(
-                    f"<div style='font-size:0.75rem;color:#6B7280;margin-bottom:8px;'>"
-                    f"Selected: <code style='color:{ACCENT};'>{sel_case['case_id']}</code></div>",
-                    unsafe_allow_html=True,
-                )
-                render_drilldown(sel_case, fused, raw)
+                for i, sel_idx in enumerate(selected_rows):
+                    sel_case = view_cases.iloc[sel_idx]
+                    st.markdown(
+                        f"<div style='font-size:0.75rem;color:#6B7280;margin-bottom:8px;'>"
+                        f"Selected: <code style='color:{ACCENT};'>{sel_case['case_id']}</code></div>",
+                        unsafe_allow_html=True,
+                    )
+                    render_drilldown(sel_case, fused, raw)
+                    if i < len(selected_rows) - 1:
+                        st.markdown("<hr style='border:1px solid #1F2937; margin: 30px 0;'/>", unsafe_allow_html=True)
             else:
                 st.markdown("""
 <div class="drill-panel-empty">
