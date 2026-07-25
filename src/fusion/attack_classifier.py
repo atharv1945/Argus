@@ -118,12 +118,14 @@ def classify_attack_type(row: Dict[str, Any]) -> str:
         return "credential_stuffing"
 
     # -- Priority 2: impossible_travel ----------------------------------------
-    # Single-event logon with fp mismatch AND success (no failure) AND high fan-out.
-    if fp_mm and event_ct <= 1 and fail_ratio == 0 and fan_out >= THRESH["IT_fan_out_min"]:
+    # Genuine behavioral signal: geo_velocity_violation=True (country change within 2h).
+    # Fallback: fan_out >= IT_fan_out_min if geo_velocity_violation absent.
+    geo_vel = bool(_g(row, "geo_velocity_violation", False))
+    if fp_mm and event_ct <= 1 and fail_ratio == 0 and (geo_vel or fan_out >= THRESH["IT_fan_out_min"]):
         return "impossible_travel"
 
     # -- Priority 3: device_spoofing ------------------------------------------
-    # Single-event successful login with fp mismatch, low/zero fan-out.
+    # Single-event successful login with fp mismatch, low/zero fan-out (and no geo_velocity_violation).
     if fp_mm and event_ct <= 1 and fail_ratio == 0:
         return "device_spoofing"
 

@@ -176,12 +176,14 @@ def _attribute_tier1(row: Dict[str, Any], result: AttributionResult) -> None:
         result.tier_condition = f"hard_rule fp_mismatch+corroborated ({cond_str})"
 
     # ── geo_velocity_violation ──────────────────────────────────────────────
-    if "geo_velocity_violation" in detail:
+    geo_vel = bool(_g(row, "geo_velocity_violation", 0))
+    if "geo_velocity_violation" in detail or geo_vel:
         result.factors.append(
-            "geo_velocity_violation=True — login origin implies physically "
-            "impossible travel speed relative to prior authentication"
+            "geo_velocity_violation=1 — authentication origin changed country within 2 hours "
+            "of entity's previous session, indicating physically impossible travel velocity"
         )
-        result.tier_condition += (" + " if result.tier_condition else "") + "hard_rule geo_velocity_violation"
+        if "geo_velocity_violation" not in result.tier_condition:
+            result.tier_condition += (" + " if result.tier_condition else "") + "hard_rule geo_velocity_violation"
 
     # ── ip_fan_in_stuffing ─────────────────────────────────────────────────
     if "ip_fan_in_stuffing" in detail:

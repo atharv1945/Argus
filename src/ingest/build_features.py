@@ -189,6 +189,7 @@ def build_session_features(df: pd.DataFrame) -> pd.DataFrame:
         # Geo diversity
         distinct_countries = grp["geo_country"].nunique()
         distinct_ips       = grp["geo_ip"].nunique()
+        primary_geo_country = grp["geo_country"].iloc[0]
 
         # Off-hours flag: any event between 22:00 and 06:00
         hours = grp["timestamp"].dt.hour
@@ -262,6 +263,7 @@ def build_session_features(df: pd.DataFrame) -> pd.DataFrame:
             "bytes_mean":             round(bytes_mean, 2),
             "distinct_countries":     distinct_countries,
             "distinct_ips":           distinct_ips,
+            "primary_geo_country":    primary_geo_country,
             "off_hours_flag":         off_hours_flag,
             # New features
             "cmd_seq_length":         cmd_seq_length,
@@ -280,7 +282,21 @@ def build_session_features(df: pd.DataFrame) -> pd.DataFrame:
             "attack_instance_id":     attack_instance_id,
         })
 
-    return pd.DataFrame(rows)
+    sf = pd.DataFrame(rows)
+
+    # ── Compute geo_velocity_violation across consecutive sessions per entity ──
+    sf["session_start_dt"] = pd.to_datetime(sf["session_start"])
+    sf = sf.sort_values(["entity_id", "session_start_dt"])
+    sf["prev_geo_country"] = sf.groupby("entity_id")["primary_geo_country"].shift(1)
+    sf["prev_session_start"] = sf.groupby("entity_id")["session_start_dt"].shift(1)
+    sf["time_since_prev_session_min"] = (sf["session_start_dt"] - sf["prev_session_start"]).dt.total_seconds() / 60.0
+    sf["geo_velocity_violation"] = (
+        (sf["primary_geo_country"] != sf["prev_geo_country"]) &
+        sf["prev_geo_country"].notna() &
+        (sf["time_since_prev_session_min"] <= 120.0)
+    ).astype(int)
+    sf.drop(columns=["session_start_dt", "prev_geo_country", "prev_session_start", "time_since_prev_session_min"], inplace=True)
+    return sf
 
 
 # ─────────────────────────────────────────────────────────────────────────────
