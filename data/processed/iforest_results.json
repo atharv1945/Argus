@@ -1,84 +1,84 @@
 {
   "overall": {
-    "precision": 0.3644859813084112,
+    "precision": 0.43010752688172044,
     "recall": 1.0,
-    "f1": 0.5342465753424658,
-    "pr_auc": 0.9887316169763705,
-    "roc_auc": 0.9997112130678121,
-    "threshold": -0.03943233714371512,
-    "n_test_sessions": 3230,
-    "n_malicious_test": 78
+    "f1": 0.6015037593984962,
+    "pr_auc": 0.9832154314390381,
+    "roc_auc": 0.9993437697659708,
+    "threshold": -0.041772008816811514,
+    "n_test_sessions": 3282,
+    "n_malicious_test": 120
   },
   "per_attack_type": {
     "brute_force": {
       "recall": 1.0,
-      "pr_auc": 0.7,
-      "n_sessions_this_type": 2,
-      "n_flagged_sessions": 2,
-      "n_campaigns_in_test": 2,
+      "pr_auc": 0.1113,
+      "n_sessions_this_type": 3,
+      "n_flagged_sessions": 3,
+      "n_campaigns_in_test": 3,
       "is_benign_edge_case": false,
       "note": "recall & PR-AUC vs normal traffic"
     },
     "credential_misuse": {
       "recall": 1.0,
       "pr_auc": 1.0,
-      "n_sessions_this_type": 2,
-      "n_flagged_sessions": 2,
-      "n_campaigns_in_test": 2,
+      "n_sessions_this_type": 3,
+      "n_flagged_sessions": 3,
+      "n_campaigns_in_test": 3,
       "is_benign_edge_case": false,
       "note": "recall & PR-AUC vs normal traffic"
     },
     "credential_stuffing": {
       "recall": 1.0,
-      "pr_auc": 0.9976,
-      "n_sessions_this_type": 52,
-      "n_flagged_sessions": 52,
-      "n_campaigns_in_test": 2,
+      "pr_auc": 0.9859,
+      "n_sessions_this_type": 78,
+      "n_flagged_sessions": 78,
+      "n_campaigns_in_test": 3,
       "is_benign_edge_case": false,
       "note": "recall & PR-AUC vs normal traffic"
     },
     "device_spoofing": {
       "recall": 1.0,
-      "pr_auc": 0.45,
-      "n_sessions_this_type": 2,
-      "n_flagged_sessions": 2,
-      "n_campaigns_in_test": 2,
+      "pr_auc": 0.8333,
+      "n_sessions_this_type": 3,
+      "n_flagged_sessions": 3,
+      "n_campaigns_in_test": 3,
       "is_benign_edge_case": false,
       "note": "recall & PR-AUC vs normal traffic"
     },
     "impossible_travel": {
       "recall": 1.0,
-      "pr_auc": 0.7,
-      "n_sessions_this_type": 2,
-      "n_flagged_sessions": 2,
-      "n_campaigns_in_test": 2,
+      "pr_auc": 1.0,
+      "n_sessions_this_type": 6,
+      "n_flagged_sessions": 6,
+      "n_campaigns_in_test": 6,
       "is_benign_edge_case": false,
       "note": "recall & PR-AUC vs normal traffic"
     },
     "insider_drift": {
       "recall": 1.0,
       "pr_auc": 0.0,
-      "n_sessions_this_type": 5,
-      "n_flagged_sessions": 5,
-      "n_campaigns_in_test": 1,
+      "n_sessions_this_type": 10,
+      "n_flagged_sessions": 10,
+      "n_campaigns_in_test": 2,
       "is_benign_edge_case": true,
       "note": "BENIGN edge case (is_malicious=False). Model should NOT flag these."
     },
     "lateral_movement": {
       "recall": 1.0,
       "pr_auc": 1.0,
-      "n_sessions_this_type": 2,
-      "n_flagged_sessions": 2,
-      "n_campaigns_in_test": 2,
+      "n_sessions_this_type": 3,
+      "n_flagged_sessions": 3,
+      "n_campaigns_in_test": 3,
       "is_benign_edge_case": false,
       "note": "recall & PR-AUC vs normal traffic"
     },
     "low_and_slow_exfiltration": {
       "recall": 1.0,
-      "pr_auc": 0.8804,
-      "n_sessions_this_type": 16,
-      "n_flagged_sessions": 16,
-      "n_campaigns_in_test": 2,
+      "pr_auc": 0.9043,
+      "n_sessions_this_type": 24,
+      "n_flagged_sessions": 24,
+      "n_campaigns_in_test": 3,
       "is_benign_edge_case": false,
       "note": "recall & PR-AUC vs normal traffic"
     }
@@ -101,21 +101,21 @@
       "note": "Top 1.0% of test sessions by anomaly score (32 sessions)"
     },
     "top_2.0pct": {
-      "k": 64,
-      "true_positives": 64,
+      "k": 65,
+      "true_positives": 65,
       "false_positives": 0,
       "precision": 1.0,
       "insider_drift_flagged": 0,
-      "note": "Top 2.0% of test sessions by anomaly score (64 sessions)"
+      "note": "Top 2.0% of test sessions by anomaly score (65 sessions)"
     }
   },
   "insider_drift_analysis": {
-    "total_drift_test_sessions": 5,
-    "drift_flagged_as_anomaly": 5,
+    "total_drift_test_sessions": 10,
+    "drift_flagged_as_anomaly": 10,
     "drift_false_positive_rate": 1.0,
-    "drift_mean_score": 0.036104423040855524,
-    "normal_mean_score": -0.10087334198190133,
-    "malicious_mean_score": 0.08535350190077277,
+    "drift_mean_score": 0.01200912720698688,
+    "normal_mean_score": -0.10214055128134056,
+    "malicious_mean_score": 0.07548869662379246,
     "note": "insider_drift sessions are BENIGN (is_malicious=False). Flagging them counts against precision."
   }
 }

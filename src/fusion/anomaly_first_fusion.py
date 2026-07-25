@@ -51,6 +51,7 @@ Usage (standalone):
     python src/fusion/anomaly_first_fusion.py
 """
 
+import json
 import os
 import numpy as np
 import pandas as pd
@@ -73,14 +74,81 @@ GRAPH_BOOST_WEIGHTS = {
 }
 
 # Hard-rule thresholds
-HARD_RULE_FP_MISMATCH       = 1
-HARD_RULE_GEO_VEL_COL       = "geo_velocity_violation"   # bool or int
-HARD_RULE_DISTINCT_COUNTRIES = 3    # alternative geo trigger if col missing
+HARD_RULE_FP_MISMATCH        = 1
+HARD_RULE_GEO_VEL_COL        = "geo_velocity_violation"   # bool or int
+HARD_RULE_DISTINCT_COUNTRIES  = 3    # alternative geo trigger if col missing
+HARD_RULE_NEW_DEV_FLAT        = 2    # Global fallback flat threshold for new_device_edge_count
+                                     # Used only if entity cohort threshold cannot be looked up.
+                                     # Role-aware: IT/SVC cohorts get higher thresholds (G3 fix).
 
 # Tier band boundaries (inclusive upper)
 TIER3_MAX = 54
 TIER2_MAX = 89
 TIER1_MIN = 90
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# G3: Peer-group cohort device threshold computation
+# ─────────────────────────────────────────────────────────────────────────────
+
+def compute_cohort_device_thresholds(
+    train_df: pd.DataFrame,
+    percentile: float = 95.0,
+    min_threshold: int = 2,
+    save_path: str = "data/processed/cohort_device_thresholds.json",
+) -> dict:
+    """
+    Compute peer-group 95th-percentile of new_device_edge_count by
+    (entity_type, entity_dept) from training sessions. Returns a dict
+    keyed by (entity_type, entity_dept) tuples with integer threshold values.
+
+    Why this matters (G3): A flat threshold of new_device_edge_count >= 2
+    flags IT-department service accounts and IT users as suspicious simply
+    because their role requires connecting to many distinct hosts. An IT
+    service account's p95 of new_device_edge_count may be 8, so a count of
+    2 is completely normal for that cohort. This fix prevents the
+    fp_mismatch+corroborated hard rule from triggering on SVC_1115,
+    U1128, U1295 and similar entities.
+
+    Parameters
+    ----------
+    train_df     : Training-split sessions (must have entity_type, entity_dept,
+                   new_device_edge_count, is_malicious).
+    percentile   : Percentile to use as threshold (default: 95th).
+    min_threshold: Floor threshold — even if p95=0, the threshold is at least
+                   this value so we don't flag every entity.
+    save_path    : JSON file to persist thresholds for auditability.
+
+    Returns
+    -------
+    dict[(entity_type, entity_dept)] -> int threshold
+    """
+    if "new_device_edge_count" not in train_df.columns:
+        print("    [!] new_device_edge_count not in train_df — using flat threshold everywhere")
+        return {}
+
+    # Only use normal (non-malicious) train sessions to avoid attack campaigns
+    # inflating the upper tail of the device-count distribution.
+    normal_train = train_df[~train_df["is_malicious"]]
+
+    thresholds = {}
+    for (etype, dept), grp in normal_train.groupby(["entity_type", "entity_dept"]):
+        p95_val = grp["new_device_edge_count"].quantile(percentile / 100.0)
+        # Add 1 so threshold is exclusive of the 95th percentile itself.
+        # This means sessions at exactly p95 are NOT flagged — only those beyond.
+        thresh = max(min_threshold, int(np.ceil(p95_val)) + 1)
+        thresholds[(etype, dept)] = thresh
+
+    # Persist for auditability
+    os.makedirs(os.path.dirname(save_path) if os.path.dirname(save_path) else ".", exist_ok=True)
+    serialisable = {f"{k[0]}:{k[1]}": v for k, v in thresholds.items()}
+    with open(save_path, "w", encoding="utf-8") as f:
+        json.dump(serialisable, f, indent=2, sort_keys=True)
+    print(f"    [G3] Cohort device thresholds saved → {save_path}")
+    for (etype, dept), thr in sorted(thresholds.items()):
+        print(f"         {etype:15s} / {dept:12s} : new_device_edge_count >= {thr}")
+
+    return thresholds
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -99,7 +167,7 @@ def _normalise_if_score(if_scores: pd.Series) -> pd.Series:
     return (inverted - lo) / (hi - lo)
 
 
-def _check_hard_rules(row: pd.Series) -> tuple:
+def _check_hard_rules(row: pd.Series, cohort_dev_threshold: int = 2) -> tuple:
     """
     Returns (hard_rule_count: int, hard_rule_detail: str).
 
@@ -107,9 +175,10 @@ def _check_hard_rules(row: pd.Series) -> tuple:
     --------------------------------
     fp_mismatch alone fires for legitimate device-rotating users (Campaign 4,
     133 normal FPs observed in diagnostic). Require corroboration from ANY of:
-      - new_device_edge_count >= 2  : at least 2 brand-new devices (never in entity
-                                      history) — excludes the one-time hardware upgrade
-                                      (Campaign 4 has count=1 for its first session).
+      - new_device_edge_count >= cohort_dev_threshold : brand-new devices above the
+                                    peer-group 95th percentile. G3 fix: IT/SVC
+                                    cohorts have higher thresholds (8-12) so their
+                                    normal device rotation does not trigger this rule.
       - distinct_countries > 1      : cross-geo device jump.
       - event_count == 1            : single-event flash session typical of spoofing,
                                       credential stuffing, or impossible_travel
@@ -131,11 +200,11 @@ def _check_hard_rules(row: pd.Series) -> tuple:
     event_ct  = int(row.get("event_count", 2))
 
     # fp_mismatch hard-rule: corroborated if ANY of:
-    #   - new_device_edge_count >= 2 (>=2 devices not in entity history)
+    #   - new_device_edge_count >= cohort_dev_threshold (peer-group normalised, G3)
     #   - distinct_countries > 1  (geo jump)
     #   - event_count == 1        (single-event flash session)
     if fp_mm >= HARD_RULE_FP_MISMATCH:
-        if new_dev >= 2 or countries > 1 or event_ct == 1:
+        if new_dev >= cohort_dev_threshold or countries > 1 or event_ct == 1:
             rules_fired.append("fp_mismatch+corroborated")
 
     # Check geo_velocity_violation (may or may not exist in merged frame)
@@ -153,7 +222,20 @@ def _check_hard_rules(row: pd.Series) -> tuple:
     if ip_fan_in >= 3 and fail_ratio >= 0.5:
         rules_fired.append("ip_fan_in_stuffing")
 
+    # Rule A — Single-entity brute force volume: high failure count & high failure ratio
+    fail_cnt = int(row.get("failure_count", 0))
+    if fail_cnt >= 10 and fail_ratio >= 0.80:
+        rules_fired.append("brute_force_volume")
+
+    # Rule B — Credential misuse: high risky-command ratio in sustained off-hours session
+    cmd_r_ratio = float(row.get("cmd_risky_ratio", 0.0))
+    cmd_len     = int(row.get("cmd_seq_length", 0))
+    off_hours   = int(row.get("off_hours_flag", 0))
+    if cmd_r_ratio >= 0.45 and cmd_len >= 10 and off_hours == 1:
+        rules_fired.append("credential_misuse_risk")
+
     return len(rules_fired), ",".join(rules_fired) if rules_fired else ""
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -206,8 +288,29 @@ def compute_fused_risk(merged_df: pd.DataFrame) -> pd.DataFrame:
         + df["ip_fan_in_norm"].fillna(0)    * GRAPH_BOOST_WEIGHTS["ip_fan_in_norm"]
     ).clip(0, 0.60)
 
-    # ── Step 4: Hard rules ────────────────────────────────────────────────────
-    hard_results = df.apply(_check_hard_rules, axis=1)
+    # ── Step 4: Hard rules (G3: peer-group cohort device thresholds) ──────────
+    # Compute per-cohort new_device_edge_count thresholds from training sessions.
+    # This prevents IT/SVC entities from triggering fp_mismatch+corroborated solely
+    # on new_device_edge_count, which is structurally high for those cohorts.
+    if "split" in df.columns:
+        train_mask = df["split"] == "train"
+    else:
+        train_mask = pd.Series([True] * len(df), index=df.index)
+    cohort_thresholds = compute_cohort_device_thresholds(df[train_mask])
+
+    # Build per-session cohort threshold lookup
+    def _get_cohort_threshold(row: pd.Series) -> int:
+        etype = str(row.get("entity_type", "user"))
+        dept  = str(row.get("entity_dept",  "Engineering"))
+        return cohort_thresholds.get((etype, dept), HARD_RULE_NEW_DEV_FLAT)
+
+    df["_cohort_dev_thr"] = df.apply(_get_cohort_threshold, axis=1)
+
+    hard_results = df.apply(
+        lambda row: _check_hard_rules(row, cohort_dev_threshold=int(row["_cohort_dev_thr"])),
+        axis=1
+    )
+    df.drop(columns=["_cohort_dev_thr"], inplace=True)
     df["hard_rule_fired"]  = hard_results.apply(lambda x: x[0])
     df["hard_rule_detail"] = hard_results.apply(lambda x: x[1])
 

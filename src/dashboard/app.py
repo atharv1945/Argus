@@ -97,20 +97,33 @@ def get_drift_level(drift_baseline: dict, fused: pd.DataFrame) -> tuple[str, str
     """
     Compute drift level by comparing test alert rate to train baseline.
     Returns (level, colour, description).
+
+    G4 fix: drift_baseline now uses only stable normal training sessions
+    (is_malicious==False AND entity_session_idx>2). This eliminates the
+    spurious 8.7x ratio that appeared when malicious campaigns and cold-start
+    sessions were included in the baseline.
     """
     train_rate = float(drift_baseline.get("alert_rate", 0.095))
+    n_baseline = int(drift_baseline.get("n_sessions", 0))
+    baseline_filter = drift_baseline.get("baseline_filter", "raw train")
     test = fused[fused["split"] == "test"]
     if len(test) == 0:
         return "UNKNOWN", "#6b7280", "Insufficient test data"
-    test_alert_rate = (test["fused_risk_score"] >= 50).mean()
+    # Use threshold=55 matching the actual Tier-2/3 boundary in the fusion engine
+    test_alert_rate = (test["fused_risk_score"] >= 55).mean()
+    # Only count normal (non-malicious) test sessions for a fair comparison
+    test_normal = test[~test["is_malicious"]] if "is_malicious" in test.columns else test
+    test_alert_rate = (test_normal["fused_risk_score"] >= 55).mean()
     ratio = test_alert_rate / max(train_rate, 1e-6)
 
+    baseline_desc = f"baseline: {n_baseline:,} sessions ({baseline_filter})"
     if ratio < 1.5:
-        return "NONE", "#22c55e", f"Test alert rate {test_alert_rate:.2%} vs train {train_rate:.2%} (ratio {ratio:.2f}x)"
+        return "NONE", "#22c55e", f"Test alert rate {test_alert_rate:.2%} vs train {train_rate:.2%} (ratio {ratio:.2f}x) — {baseline_desc}"
     elif ratio < 3.0:
-        return "MODERATE", "#f59e0b", f"Test alert rate {test_alert_rate:.2%} vs train {train_rate:.2%} (ratio {ratio:.2f}x) — monitor"
+        return "MODERATE", "#f59e0b", f"Test alert rate {test_alert_rate:.2%} vs train {train_rate:.2%} (ratio {ratio:.2f}x) — monitor — {baseline_desc}"
     else:
-        return "SIGNIFICANT", "#ef4444", f"Test alert rate {test_alert_rate:.2%} vs train {train_rate:.2%} (ratio {ratio:.2f}x) — investigate"
+        return "SIGNIFICANT", "#ef4444", f"Test alert rate {test_alert_rate:.2%} vs train {train_rate:.2%} (ratio {ratio:.2f}x) — investigate — {baseline_desc}"
+
 
 
 def ensure_feedback_store():

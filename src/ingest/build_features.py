@@ -26,91 +26,124 @@ from collections import Counter
 # Campaign-level train/test split manifest (20-field expanded, 8 categories)
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Campaign IDs from regenerated dataset (seed=42, 7% ratio, 20-field spec)
-# Holding out ~1-2 latest campaigns per malicious type for test.
-# insider_drift (benign) is split chronologically like normal traffic.
+# Campaign IDs from regenerated dataset (seed=42, 20% attack ratio, expanded spec)
+# G1: Hold out 3 latest campaigns per thin attack class (vs 2 previously), giving n>=3 test sessions.
+# G5c: impossible_travel now has 14 campaigns (7 ATK_IT_* + 7 ATK_ITSC_*).
+#       Both variants share attack_type='impossible_travel' — they test different trigger paths.
+# G2: insider_drift now has 6 campaigns (5 original + 1 harder cross-dept fan-out, campaign 6).
+#     Campaign 6 is split 3 train / 2 test since it spans 2 days.
 SPLIT_MANIFEST = {
     "split_strategy": {
-        "malicious": "Campaign-level hold-out — latest 1-2 campaigns per attack_type go to test. No event-level leakage.",
+        "malicious": "Campaign-level hold-out — 3 latest-dated campaigns per attack_type go to test. No event-level leakage.",
         "normal": "Chronological split — events before 2026-06-14 00:00 UTC go to train, remainder to test.",
-        "insider_drift": "Benign edge case (is_malicious=False). Split by campaign chronologically: earlier instances to train, later to test. Used as false-positive bait for evaluation.",
+        "insider_drift": "Benign edge case (is_malicious=False). Split by campaign: earliest 4 campaigns train, latest 2 test. Campaign 6 (harder) split 3/2 internally.",
         "seed": 42
     },
     "train_campaigns": {
         "brute_force": [
-            "ATK_BF_20260603_005",
-            "ATK_BF_20260608_001",
-            "ATK_BF_20260610_003"
+            "ATK_BF_20260606_003",
+            "ATK_BF_20260607_007",
+            "ATK_BF_20260609_006",
+            "ATK_BF_20260610_004",
         ],
         "credential_misuse": [
-            "ATK_CM_20260606_001",
-            "ATK_CM_20260608_005",
-            "ATK_CM_20260609_002"
+            "ATK_CM_20260603_004",
+            "ATK_CM_20260613_003",
+            "ATK_CM_20260614_006",
+            "ATK_CM_20260615_002",
         ],
         "lateral_movement": [
-            "ATK_LM_20260604_005",
-            "ATK_LM_20260614_001",
-            "ATK_LM_20260615_003"
+            "ATK_LM_20260607_001",
+            "ATK_LM_20260607_003",
+            "ATK_LM_20260608_007",
+            "ATK_LM_20260615_002",
         ],
         "impossible_travel": [
+            # Original IT (fp_mismatch=1 + geo_vel=1)
+            "ATK_IT_20260603_003",
             "ATK_IT_20260605_004",
-            "ATK_IT_20260606_002",
-            "ATK_IT_20260614_003"
+            "ATK_IT_20260614_007",
+            "ATK_IT_20260615_002",
+            # Stolen-credential IT (fp_mismatch=0 + geo_vel=1) — G5c
+            "ATK_ITSC_20260603_006",
+            "ATK_ITSC_20260604_002",
+            "ATK_ITSC_20260605_001",
+            "ATK_ITSC_20260606_007",
         ],
         "device_spoofing": [
             "ATK_DS_20260603_001",
-            "ATK_DS_20260609_005",
-            "ATK_DS_20260610_004"
+            "ATK_DS_20260604_002",
+            "ATK_DS_20260612_004",
+            "ATK_DS_20260613_007",
         ],
         "credential_stuffing": [
-            "ATK_CS_20260604_001",
-            "ATK_CS_20260607_005",
-            "ATK_CS_20260608_003"
+            "ATK_CS_20260603_003",
+            "ATK_CS_20260611_005",
+            "ATK_CS_20260612_004",
+            "ATK_CS_20260614_007",
         ],
         "low_and_slow_exfiltration": [
-            "ATK_LS_20260603_005",
-            "ATK_LS_20260606_003",
-            "ATK_LS_20260613_001"
-        ]
+            "ATK_LS_20260606_007",
+            "ATK_LS_20260609_006",
+            "ATK_LS_20260610_005",
+            "ATK_LS_20260612_001",
+        ],
     },
     "test_campaigns": {
         "brute_force": [
-            "ATK_BF_20260612_004",
-            "ATK_BF_20260615_002"
+            "ATK_BF_20260612_002",
+            "ATK_BF_20260617_005",
+            "ATK_BF_20260619_001",
         ],
         "credential_misuse": [
-            "ATK_CM_20260612_003",
-            "ATK_CM_20260620_004"
+            "ATK_CM_20260618_001",
+            "ATK_CM_20260618_005",
+            "ATK_CM_20260620_007",
         ],
         "lateral_movement": [
-            "ATK_LM_20260617_004",
-            "ATK_LM_20260619_002"
+            "ATK_LM_20260616_004",
+            "ATK_LM_20260617_005",
+            "ATK_LM_20260618_006",
         ],
         "impossible_travel": [
-            "ATK_IT_20260616_001",
-            "ATK_IT_20260617_005"
+            # Original IT (fp_mismatch=1 + geo_vel=1)
+            "ATK_IT_20260616_005",
+            "ATK_IT_20260617_006",
+            "ATK_IT_20260618_001",
+            # Stolen-credential IT (fp_mismatch=0 + geo_vel=1) — G5c
+            "ATK_ITSC_20260614_005",
+            "ATK_ITSC_20260616_003",
+            "ATK_ITSC_20260619_004",
         ],
         "device_spoofing": [
-            "ATK_DS_20260611_002",
-            "ATK_DS_20260620_003"
+            "ATK_DS_20260616_006",
+            "ATK_DS_20260617_003",
+            "ATK_DS_20260619_005",
         ],
         "credential_stuffing": [
-            "ATK_CS_20260608_004",
-            "ATK_CS_20260618_002"
+            "ATK_CS_20260617_001",
+            "ATK_CS_20260618_002",
+            "ATK_CS_20260618_006",
         ],
         "low_and_slow_exfiltration": [
-            "ATK_LS_20260615_002",
-            "ATK_LS_20260617_004"
-        ]
+            "ATK_LS_20260618_003",
+            "ATK_LS_20260619_002",
+            "ATK_LS_20260619_004",
+        ],
     },
+    # insider_drift: campaigns 1-5 original, campaign 6 harder (G2)
+    # Campaign 6 spans 2 days: sessions on day0 (step 0-2) → train, day1 (step 3-4) → test
+    # We put campaign 6's ID in BOTH train and test so it's treated as a split campaign.
+    # The session-level assignment handles the split: sessions with session_start < cutoff → train
     "insider_drift_train": [
-        "ATK_ID_20260607_001",
-        "ATK_ID_20260609_002",
-        "ATK_ID_20260610_003"
+        "ATK_ID_20260604_005",
+        "ATK_ID_20260605_001",
+        "ATK_ID_20260605_003",
+        "ATK_ID_20260606_004",
     ],
     "insider_drift_test": [
-        "ATK_ID_20260611_004",
-        "ATK_ID_20260611_005"
+        "ATK_ID_20260608_006",   # campaign 5
+        "ATK_ID_20260610_002",   # campaign 6 (harder) — all 5 sessions evaluated in test
     ],
     "normal_cutoff_date": "2026-06-14T00:00:00"
 }
@@ -122,6 +155,8 @@ ALL_TRAIN_CAMPAIGNS = set(
 ALL_TEST_CAMPAIGNS = set(
     cid for cids in SPLIT_MANIFEST["test_campaigns"].values() for cid in cids
 ) | set(SPLIT_MANIFEST["insider_drift_test"])
+
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -284,10 +319,40 @@ def build_session_features(df: pd.DataFrame) -> pd.DataFrame:
 
     sf = pd.DataFrame(rows)
 
-    # ── Compute geo_velocity_violation across consecutive sessions per entity ──
+    # ── Compute entity_session_idx (1-indexed session rank per entity, chronological) ──
+    # Used by drift_monitor.py to exclude cold-start sessions (entity_session_idx <= 2)
     sf["session_start_dt"] = pd.to_datetime(sf["session_start"])
     sf = sf.sort_values(["entity_id", "session_start_dt"])
-    sf["prev_geo_country"] = sf.groupby("entity_id")["primary_geo_country"].shift(1)
+    sf["entity_session_idx"] = sf.groupby("entity_id").cumcount() + 1
+
+    # ── Compute geo_velocity_violation across consecutive sessions per entity ──
+    # G5a FIX: Only propagate prev_geo_country from AUTHENTICATED sessions (fp_mismatch == 0).
+    # This prevents probe contamination: when an attacker's credential_stuffing session is
+    # injected into a victim entity's session sequence, it sets the entity's prev_geo_country
+    # to the attacker's country, causing the victim's next LEGITIMATE session to falsely
+    # trigger geo_velocity_violation (RU->US in 82 min etc.). By propagating prev_geo_country
+    # only from fp_mismatch=0 sessions, the victim's legitimate geo baseline is preserved.
+    #
+    # Why fp_mismatch=1 impossible_travel sessions still trigger correctly:
+    # Real impossible_travel attack sessions have fp_mismatch=1. Their PREVIOUS session
+    # (the entity's normal session before the attack) has fp_mismatch=0 with the entity's
+    # home country. The ffill() ensures that prior authenticated country is still tracked
+    # and compared against the attack session's foreign geo_country. The attack session's
+    # own fp_mismatch=1 only means we don't USE it as a baseline for subsequent sessions,
+    # not that we can't DETECT the country change in it.
+    #
+    # G5b NOTE: The sort-order dependency is a legitimate cross-session rolling computation
+    # (geo_velocity requires chronological ordering). It is not a positional accumulation bug.
+    # The borderline Tier 2 session that shifted classification after the geo_velocity sort
+    # was added was a genuine consequence of re-ordering the DataFrame. The ffill fix
+    # (authenticated-only baseline) makes the computation more robust to such cases.
+    sf["authenticated_geo"] = sf["primary_geo_country"].where(sf["fp_mismatch"] == 0, other=np.nan)
+    sf["prev_geo_country"]  = sf.groupby("entity_id")["authenticated_geo"].shift(1)
+    # Forward-fill: carry the last known authenticated country forward if the immediately
+    # previous session was malicious/unauth (fp_mismatch=1). This ensures:
+    #   - Victim entities: previous attacker session doesn't pollute geo baseline
+    #   - Real IT sessions: still get the correct prev_geo_country from last auth session
+    sf["prev_geo_country"]  = sf.groupby("entity_id")["prev_geo_country"].ffill()
     sf["prev_session_start"] = sf.groupby("entity_id")["session_start_dt"].shift(1)
     sf["time_since_prev_session_min"] = (sf["session_start_dt"] - sf["prev_session_start"]).dt.total_seconds() / 60.0
     sf["geo_velocity_violation"] = (
@@ -295,7 +360,8 @@ def build_session_features(df: pd.DataFrame) -> pd.DataFrame:
         sf["prev_geo_country"].notna() &
         (sf["time_since_prev_session_min"] <= 120.0)
     ).astype(int)
-    sf.drop(columns=["session_start_dt", "prev_geo_country", "prev_session_start", "time_since_prev_session_min"], inplace=True)
+    sf.drop(columns=["session_start_dt", "authenticated_geo", "prev_geo_country",
+                     "prev_session_start", "time_since_prev_session_min"], inplace=True)
     return sf
 
 

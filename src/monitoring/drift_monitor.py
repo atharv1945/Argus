@@ -143,16 +143,35 @@ def compute_baseline(
     Parameters
     ----------
     train_df : DataFrame with columns fused_risk_score, transformer_score,
-               iforest_score, and is_malicious.
+               iforest_score, is_malicious, and optionally entity_session_idx.
     out_path : JSON output path.
+
+    Filtering applied (production-correct methodology, verified in Phase 4 / G4):
+    1. Exclude malicious sessions (is_malicious == False) — malicious campaigns
+       inflate the score distribution and cause train alert rate to appear 8-10x
+       higher than expected for normal traffic, making Check A falsely fail.
+    2. Exclude cold-start sessions (entity_session_idx <= 2) — first 1-2 sessions
+       per entity have inflated anomaly scores because the rolling baseline has
+       zero prior history. Including these inflates the baseline alert rate.
 
     Returns
     -------
     dict — baseline statistics (also written to out_path).
     """
-    risk_scores = train_df["fused_risk_score"].values.astype(float)
-    tf_scores   = train_df["transformer_score"].values.astype(float)
-    if_scores   = train_df["iforest_score"].values.astype(float)
+    # Apply production-correct filters
+    baseline_df = train_df[~train_df["is_malicious"]].copy()
+    if "entity_session_idx" in baseline_df.columns:
+        baseline_df = baseline_df[baseline_df["entity_session_idx"] > 2].copy()
+        print(f"     After cold-start filter (entity_session_idx > 2): {len(baseline_df):,} sessions")
+    else:
+        print("     [WARN] entity_session_idx not in DataFrame — cold-start filter skipped")
+
+    if len(baseline_df) == 0:
+        raise ValueError("Baseline DataFrame is empty after filtering — check splits and entity_session_idx.")
+
+    risk_scores = baseline_df["fused_risk_score"].values.astype(float)
+    tf_scores   = baseline_df["transformer_score"].values.astype(float)
+    if_scores   = baseline_df["iforest_score"].values.astype(float)
 
     # Compute 10-bin histogram for PSI (fixed bin edges from training distribution)
     bin_edges = np.linspace(
@@ -168,6 +187,8 @@ def compute_baseline(
 
     baseline = {
         "n_sessions":         int(total),
+        "n_raw_train":        int(len(train_df)),
+        "baseline_filter":    "is_malicious==False AND entity_session_idx>2",
         "alert_threshold":    ALERT_THRESHOLD,
         "alert_rate":         alert_rate,
         "psi_bin_edges":      bin_edges.tolist(),
@@ -197,9 +218,10 @@ def compute_baseline(
         json.dump(baseline, f, indent=2)
 
     print(f"[OK] Drift baseline saved → {out_path}")
-    print(f"     Train sessions : {total:,}")
-    print(f"     Alert rate     : {alert_rate:.4f} ({int(alert_rate*total)} sessions flagged)")
-    print(f"     Risk score     : mean={baseline['risk_score']['mean']:.2f}  "
+    print(f"     Raw train sessions  : {len(train_df):,}")
+    print(f"     Baseline sessions   : {total:,} (after malicious+cold-start filter)")
+    print(f"     Alert rate          : {alert_rate:.4f} ({int(alert_rate*total)} sessions flagged)")
+    print(f"     Risk score          : mean={baseline['risk_score']['mean']:.2f}  "
           f"p90={baseline['risk_score']['p90']:.1f}  p99={baseline['risk_score']['p99']:.1f}")
     return baseline
 
@@ -355,7 +377,13 @@ def main():
     result = pd.read_parquet(fused_path)
 
     train_df = result[result["split"] == "train"].copy()
-    print(f"    Train sessions: {len(train_df):,}")
+    n_raw = len(train_df)
+    print(f"    Raw train sessions : {n_raw:,}")
+    n_malicious = train_df["is_malicious"].sum()
+    print(f"    Malicious in train : {n_malicious:,} (excluded from baseline)")
+    if "entity_session_idx" in train_df.columns:
+        n_coldstart = (train_df["entity_session_idx"] <= 2).sum()
+        print(f"    Cold-start (idx<=2): {n_coldstart:,} (excluded from baseline)")
 
     baseline = compute_baseline(train_df, out_path=baseline_path)
     return baseline

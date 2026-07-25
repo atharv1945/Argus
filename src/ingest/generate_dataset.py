@@ -32,7 +32,7 @@ class GeneratorConfig:
     num_days: int = 21
     start_date_str: str = "2026-06-01"
     random_seed: int = 42
-    attack_entity_ratio: float = 0.07  # ~7% of entities targeted by malicious campaigns
+    attack_entity_ratio: float = 0.20  # ~20% of entities targeted by malicious campaigns (raised for sample-size)
     output_dir: str = "data/processed"
 
 DEPARTMENTS = {
@@ -380,8 +380,9 @@ class AttackInjector:
 
     def inject_all_vectors(self) -> List[Dict]:
         attack_events = []
-        num_attack_users = max(35, int(len(self.profiles) * self.config.attack_entity_ratio))
-        target_users = random.sample(self.profiles, num_attack_users)
+        # Scale to ~10-12 campaigns per thin attack class (G1: increase sample size)
+        num_attack_users = max(56, int(len(self.profiles) * self.config.attack_entity_ratio))
+        target_users = random.sample(self.profiles, min(num_attack_users, len(self.profiles) - 10))
         
         malicious_types = [
             "credential_misuse",
@@ -390,7 +391,9 @@ class AttackInjector:
             "impossible_travel",
             "device_spoofing",
             "credential_stuffing",
-            "low_and_slow_exfiltration"
+            "low_and_slow_exfiltration",
+            # impossible_travel_sc: same-device stolen-credential variant (G5c)
+            "impossible_travel_sc",
         ]
         
         vector_campaign_counts = {at: 0 for at in malicious_types}
@@ -411,6 +414,9 @@ class AttackInjector:
                 attack_events.extend(self._inject_lateral_movement(user, campaign_date, campaign_num))
             elif attack_type == "impossible_travel":
                 attack_events.extend(self._inject_impossible_travel(user, campaign_date, campaign_num))
+            elif attack_type == "impossible_travel_sc":
+                # Same-device stolen-credential impossible travel (fp_mismatch=0, geo_velocity=1)
+                attack_events.extend(self._inject_stolen_credential_impossible_travel(user, campaign_date, campaign_num))
             elif attack_type == "device_spoofing":
                 attack_events.extend(self._inject_device_spoofing(user, campaign_date, campaign_num))
             elif attack_type == "credential_stuffing":
@@ -421,10 +427,16 @@ class AttackInjector:
                 attack_events.extend(self._inject_low_and_slow_exfiltration(user, campaign_date, campaign_num))
                 
         # Inject benign insider_drift edge cases (is_malicious=False)
-        drift_users = random.sample([p for p in self.profiles if p not in target_users], 5)
+        # Campaigns 1-5: original, Campaign 6: harder fan-out mimicking lateral_movement (G2)
+        remaining = [p for p in self.profiles if p not in target_users]
+        drift_users = random.sample(remaining, min(6, len(remaining)))
         for d_num, d_user in enumerate(drift_users, 1):
             d_date = self.start_date + timedelta(days=random.randint(3, 10))
-            attack_events.extend(self._inject_insider_drift(d_user, d_date, d_num))
+            if d_num <= 5:
+                attack_events.extend(self._inject_insider_drift(d_user, d_date, d_num))
+            else:
+                # Campaign 6: harder insider drift — cross-dept fan-out in one day (G2)
+                attack_events.extend(self._inject_harder_insider_drift(d_user, d_date, 6))
 
         return attack_events
 
@@ -529,6 +541,7 @@ class AttackInjector:
         return events
 
     def _inject_impossible_travel(self, user: UserProfile, date: datetime, campaign_num: int) -> List[Dict]:
+        """Original impossible travel: fp_mismatch=1 (unrecognized VPN device) + geo_velocity=1."""
         events = []
         instance_id = f"ATK_IT_{date.strftime('%Y%m%d')}_{campaign_num:03d}"
         time_us = date.replace(hour=random.randint(8, 18), minute=10, second=0)
@@ -554,6 +567,55 @@ class AttackInjector:
             "command_sequence": "", "device_id": "DEV_UNRECOGNIZED_VPN_GW", "device_fingerprint": "Linux | 00:00:00:00:00:00 | TLS1.3",
             "geo_country": foreign_country, "geo_ip": foreign_ip, "session_id": session_foreign,
             "bytes_transferred": 0, "status": "SUCCESS", "is_malicious": True, "attack_type": "impossible_travel", "attack_instance_id": instance_id
+        })
+        return events
+
+    def _inject_stolen_credential_impossible_travel(self, user: UserProfile, date: datetime, campaign_num: int) -> List[Dict]:
+        """
+        [G5c] Stolen-credential impossible travel: fp_mismatch=0, geo_velocity_violation=1.
+        Attacker uses a cloned session token (no device change needed).
+        The entity's PRIMARY device fingerprint is preserved, but the geo origin
+        shifts to a foreign country within 60 minutes of their last authenticated session.
+        is_malicious=True, attack_type='impossible_travel'.
+        """
+        events = []
+        instance_id = f"ATK_ITSC_{date.strftime('%Y%m%d')}_{campaign_num:03d}"
+        # Entity's normal morning session (benign, same device + home country)
+        time_legit = date.replace(hour=random.randint(8, 10), minute=5, second=0)
+        session_legit = f"SESS_LEGIT_{uuid.uuid4().hex[:8]}"
+        events.append({
+            "entity_id": user.entity_id, "entity_type": user.entity_type, "entity_role": user.entity_role,
+            "entity_dept": user.entity_dept, "timestamp": time_legit, "event_type": "logon",
+            "auth_method": user.auth_method, "resource_id": "PORTAL_INTRANET", "resource_dept": "General",
+            "command_sequence": "", "device_id": user.primary_device, "device_fingerprint": user.primary_fingerprint,
+            "geo_country": user.home_country, "geo_ip": user.home_ip, "session_id": session_legit,
+            "bytes_transferred": 0, "status": "SUCCESS", "is_malicious": False, "attack_type": "none",
+            "attack_instance_id": "none"
+        })
+        events.append({
+            "entity_id": user.entity_id, "entity_type": user.entity_type, "entity_role": user.entity_role,
+            "entity_dept": user.entity_dept, "timestamp": time_legit + timedelta(minutes=25), "event_type": "logoff",
+            "auth_method": user.auth_method, "resource_id": "PORTAL_INTRANET", "resource_dept": "General",
+            "command_sequence": "", "device_id": user.primary_device, "device_fingerprint": user.primary_fingerprint,
+            "geo_country": user.home_country, "geo_ip": user.home_ip, "session_id": session_legit,
+            "bytes_transferred": 0, "status": "SUCCESS", "is_malicious": False, "attack_type": "none",
+            "attack_instance_id": "none"
+        })
+        # Attacker session: SAME device + fingerprint (token theft), but foreign geo — 45 min later
+        time_attack = time_legit + timedelta(minutes=45)
+        session_attack = f"SESS_ITSC_{uuid.uuid4().hex[:8]}"
+        foreign_country, foreign_ip = random.choice([("CN", "202.108.22.100"), ("BR", "189.1.100.50"), ("NG", "41.76.111.21")])
+        events.append({
+            "entity_id": user.entity_id, "entity_type": user.entity_type, "entity_role": user.entity_role,
+            "entity_dept": user.entity_dept, "timestamp": time_attack, "event_type": "logon",
+            "auth_method": user.auth_method,  # same auth method — session token reuse
+            "resource_id": "RES_EXEC_FINANCIALS", "resource_dept": "Executive",
+            "command_sequence": "read,export_data", "device_id": user.primary_device,
+            "device_fingerprint": user.primary_fingerprint,  # SAME fingerprint (no hardware change)
+            "geo_country": foreign_country, "geo_ip": foreign_ip, "session_id": session_attack,
+            "bytes_transferred": random.randint(2_000_000, 15_000_000),
+            "status": "SUCCESS", "is_malicious": True, "attack_type": "impossible_travel",
+            "attack_instance_id": instance_id
         })
         return events
 
@@ -831,6 +893,73 @@ class AttackInjector:
             
         return events
 
+    def _inject_harder_insider_drift(self, user: UserProfile, start_date: datetime, campaign_num: int) -> List[Dict]:
+        """
+        [G2] Campaign 6: Harder benign insider_drift — entity joins a cross-functional
+        crisis-response task force. Accesses 5 departments' resources in ONE DAY
+        using their NORMAL device (fp_mismatch=0), during business hours.
+        Behaviorally mimics lateral_movement fan-out, but is legitimately benign:
+          - Same device, same country (no geo or device signal)
+          - off_hours_flag=0 (business hours)
+          - distinct_resource_depts=5 (threshold mimicking lateral_movement)
+          - All accesses are read/write on shared project resources (plausible business context)
+        is_malicious=False.
+        Split: 3 train sessions + 2 test sessions (staged over 2 days).
+        """
+        events = []
+        instance_id = f"ATK_ID_{start_date.strftime('%Y%m%d')}_{campaign_num:03d}"
+        # Resources across 5 departments — legitimate cross-functional access
+        cross_dept_resources = [
+            ("RES_FIN_ERP",           "Finance"),
+            ("RES_EXEC_BOARD_DECK",   "Executive"),
+            ("DB_HR_EMPLOYEE_RECORDS","HR"),
+            ("RES_IT_KNOWLEDGEBASE",  "IT"),
+            ("RES_SALES_CRM",         "Sales"),
+        ]
+        # 5 sessions across 2 days (3 train day1, 2 test day2)
+        for step in range(5):
+            day_offset = 0 if step < 3 else 1  # first 3 on day 0, last 2 on day 1
+            hour = [9, 11, 14, 10, 15][step]
+            sess_date = start_date + timedelta(days=day_offset)
+            session_id = f"SESS_ID_{uuid.uuid4().hex[:8]}"
+            res_id, res_dept = cross_dept_resources[step]
+            start_time = sess_date.replace(hour=hour, minute=random.randint(5, 45), second=0)
+
+            events.append({
+                "entity_id": user.entity_id, "entity_type": user.entity_type, "entity_role": user.entity_role,
+                "entity_dept": user.entity_dept, "timestamp": start_time, "event_type": "logon",
+                "auth_method": user.auth_method, "resource_id": res_id, "resource_dept": res_dept,
+                "command_sequence": "", "device_id": user.primary_device,
+                "device_fingerprint": user.primary_fingerprint,
+                "geo_country": user.home_country, "geo_ip": user.home_ip,
+                "session_id": session_id, "bytes_transferred": 0,
+                "status": "SUCCESS", "is_malicious": False,
+                "attack_type": "insider_drift", "attack_instance_id": instance_id
+            })
+            events.append({
+                "entity_id": user.entity_id, "entity_type": user.entity_type, "entity_role": user.entity_role,
+                "entity_dept": user.entity_dept, "timestamp": start_time + timedelta(minutes=20), "event_type": "file_access",
+                "auth_method": user.auth_method, "resource_id": res_id, "resource_dept": res_dept,
+                "command_sequence": "read,write", "device_id": user.primary_device,
+                "device_fingerprint": user.primary_fingerprint,
+                "geo_country": user.home_country, "geo_ip": user.home_ip,
+                "session_id": session_id, "bytes_transferred": random.randint(500_000, 3_000_000),
+                "status": "SUCCESS", "is_malicious": False,
+                "attack_type": "insider_drift", "attack_instance_id": instance_id
+            })
+            events.append({
+                "entity_id": user.entity_id, "entity_type": user.entity_type, "entity_role": user.entity_role,
+                "entity_dept": user.entity_dept, "timestamp": start_time + timedelta(minutes=45), "event_type": "logoff",
+                "auth_method": user.auth_method, "resource_id": res_id, "resource_dept": res_dept,
+                "command_sequence": "", "device_id": user.primary_device,
+                "device_fingerprint": user.primary_fingerprint,
+                "geo_country": user.home_country, "geo_ip": user.home_ip,
+                "session_id": session_id, "bytes_transferred": 0,
+                "status": "SUCCESS", "is_malicious": False,
+                "attack_type": "insider_drift", "attack_instance_id": instance_id
+            })
+        return events
+
 # -----------------------------------------------------------------------------
 # Main Orchestration & Export
 # -----------------------------------------------------------------------------
@@ -886,14 +1015,18 @@ def create_summary_markdown(df: pd.DataFrame, profiles: List[UserProfile], confi
     type_entity_counts = pd.Series([p.entity_type for p in profiles]).value_counts().to_dict()
     
     expected_vectors = ["credential_misuse", "brute_force", "lateral_movement", "impossible_travel", "device_spoofing", "credential_stuffing", "low_and_slow_exfiltration"]
-    failed_vectors = [v for v in expected_vectors if campaign_counts.get(v, 0) < 4]
-    
+    # Include both impossible_travel variants in the count
+    it_total = campaign_counts.get("impossible_travel", 0) + campaign_counts.get("impossible_travel_sc", 0)
+    campaign_counts_check = dict(campaign_counts)
+    campaign_counts_check["impossible_travel"] = it_total
+    failed_vectors = [v for v in expected_vectors if campaign_counts_check.get(v, 0) < 8]
+
     if failed_vectors:
-        campaign_check_str = f"- [ ] **WARNING - Campaign Density Check Failed**: Vector(s) {failed_vectors} have < 4 campaigns!"
+        campaign_check_str = f"- [ ] **WARNING - Campaign Density Check Failed**: Vector(s) {failed_vectors} have < 8 campaigns!"
         print(f"[WARNING] Campaign validation check failed for vectors: {failed_vectors}")
     else:
-        campaign_check_str = f"- [x] **Campaign Density Validation**: All 7 malicious attack vectors have >= 4 distinct campaign instances (5-6 campaigns/vector)."
-        print("[OK] Campaign validation check passed! All attack vectors have >= 4 distinct campaigns.")
+        campaign_check_str = f"- [x] **Campaign Density Validation**: All 7 malicious attack vectors have >= 8 distinct campaign instances (10-12 campaigns/vector)."
+        print("[OK] Campaign validation check passed! All attack vectors have >= 8 distinct campaigns.")
 
     summary = f"""# ARGUS Synthetic Security Dataset Summary (20-Field Expanded Spec)
 

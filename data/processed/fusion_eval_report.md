@@ -7,62 +7,62 @@
 | Metric | Value |
 |--------|-------|
 | Threshold | 50 / 100 |
-| Total test sessions | 3,230 |
-| Malicious sessions | 78 |
-| Normal sessions | 3,152 |
-| Precision | 0.7290 |
-| Recall | 1.0000 |
-| F1 | 0.8432 |
-| PR-AUC | 0.9710 |
-| ROC-AUC | 0.9994 |
+| Total test sessions | 3,282 |
+| Malicious sessions | 120 |
+| Normal sessions | 3,162 |
+| Precision | 0.6987 |
+| Recall | 0.9083 |
+| F1 | 0.7899 |
+| PR-AUC | 0.8585 |
+| ROC-AUC | 0.9140 |
 | Precision@top-1% | 1.0000 |
-| Precision@top-3% | 0.8021 |
-| Precision@top-5% | 0.4845 |
+| Precision@top-3% | 0.9388 |
+| Precision@top-5% | 0.6646 |
 
 ## Tier Distribution (Test Flagged Sessions)
 
 | Tier | Count | Description |
 |------|-------|-------------|
-| 1 (Hard rules) | 62 | fp_mismatch / geo_velocity → 90–100 |
-| 2 (Graph-boosted) | 45 | lateral/relational evidence → 55–89 |
+| 1 (Hard rules) | 104 | fp_mismatch / geo_velocity → 90–100 |
+| 2 (Graph-boosted) | 52 | lateral/relational evidence → 55–89 |
 | 3 (Model-driven) | 0 | IF + Transformer blend → 0–54 |
 
 ## Per-Attack-Type Recall
 
 | Attack Type | Test Sessions | Flagged | Recall |
 |-------------|--------------|---------|--------|
-| brute_force | 2 | 2 | 1.0000 |
-| credential_misuse | 2 | 2 | 1.0000 |
-| credential_stuffing | 52 | 52 | 1.0000 |
-| device_spoofing | 2 | 2 | 1.0000 |
-| impossible_travel | 2 | 2 | 1.0000 |
-| lateral_movement | 2 | 2 | 1.0000 |
-| low_and_slow_exfiltration | 16 | 16 | 1.0000 |
+| brute_force | 3 | 3 | 1.0000 |
+| credential_misuse | 3 | 3 | 1.0000 |
+| credential_stuffing | 78 | 78 | 1.0000 |
+| device_spoofing | 3 | 3 | 1.0000 |
+| impossible_travel | 6 | 6 | 1.0000 |
+| lateral_movement | 3 | 3 | 1.0000 |
+| low_and_slow_exfiltration | 24 | 13 | 0.5417 |
 
 ## Hard-Rule Coverage (Tier 1 Targets)
 
 | Attack Type | Total | Tier-1 | Flagged | Recall | Tier-1 Rate |
 |-------------|-------|--------|---------|--------|-------------|
-| impossible_travel | 2 | 2 | 2 | 1.0000 | 1.0000 |
-| device_spoofing | 2 | 2 | 2 | 1.0000 | 1.0000 |
+| impossible_travel | 6 | 6 | 6 | 1.0000 | 1.0000 |
+| device_spoofing | 3 | 3 | 3 | 1.0000 | 1.0000 |
 
 ## Insider Drift — False Positive Rate
 
 | Metric | Value |
 |--------|-------|
-| Total insider_drift test sessions | 5 |
-| Flagged (FP) | 0 |
-| FPR | 0.0 |
-| Mean fused score | 10.6 |
-| Max fused score | 11 |
+| Total insider_drift test sessions | 10 |
+| Flagged (FP) | 5 |
+| FPR | 0.5 |
+| Mean fused score | 46.7 |
+| Max fused score | 78 |
 
 ## Rule Classifier Accuracy
 
 | Metric | Value |
 |--------|-------|
-| Total malicious test sessions | 78 |
-| Correctly labeled | 74 |
-| Accuracy | 0.9487 |
+| Total malicious test sessions | 120 |
+| Correctly labeled | 111 |
+| Accuracy | 0.9250 |
 
 ## Key Observations
 

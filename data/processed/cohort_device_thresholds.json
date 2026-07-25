@@ -1,0 +1,20 @@
+{
+  "edge_device:Engineering": 4,
+  "edge_device:Executive": 4,
+  "edge_device:Finance": 4,
+  "edge_device:HR": 4,
+  "edge_device:IT": 4,
+  "edge_device:Sales": 5,
+  "service_account:Engineering": 4,
+  "service_account:Executive": 5,
+  "service_account:Finance": 4,
+  "service_account:HR": 4,
+  "service_account:IT": 4,
+  "service_account:Sales": 5,
+  "user:Engineering": 4,
+  "user:Executive": 4,
+  "user:Finance": 4,
+  "user:HR": 4,
+  "user:IT": 4,
+  "user:Sales": 4
+}
