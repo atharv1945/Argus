@@ -890,7 +890,6 @@ def main():
 
         st.markdown("<div class='section-title'>Filters</div>", unsafe_allow_html=True)
         split_filter = st.selectbox("Data split", ["test", "train", "all"], index=0)
-        show_benign  = st.checkbox("Show unalerted cases in Queue", value=False, help="Include normal cases (risk < 50) in the Alert Queue below")
 
         all_types = ["All"] + sorted(
             cases[cases["split"] == split_filter if split_filter != "all" else cases.index.notna()]
@@ -917,8 +916,6 @@ def main():
     view_cases = cases.copy()
     if split_filter != "all":
         view_cases = view_cases[view_cases["split"] == split_filter]
-    if not show_benign:
-        view_cases = view_cases[view_cases["max_fused_risk_score"] >= 50]
     if atk_filter != "All":
         view_cases = view_cases[view_cases["predicted_attack_type"] == atk_filter]
     if tier_options[tier_sel] == 1:
