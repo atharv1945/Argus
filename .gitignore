@@ -18,15 +18,27 @@ ENV/
 *.swp
 *.swo
 
-# Data & Models
-# Ignore large binary artifacts but keep source code and summary docs
-*.bin
-*.pt                          # PyTorch weights
-*.pkl                         # Pickled sklearn models
+# Model weights & large binary artifacts (not needed for dashboard)
+*.pt                            # PyTorch weights — not loaded by dashboard
+src/models/iforest_model.pkl    # Sklearn model — not loaded by dashboard
+data/processed/entity_graph.pkl # Serialized graph — rebuilt from full_dataset.parquet
+
 # Intermediate score parquets (regeneratable from source)
 data/processed/iforest_scores.parquet
 data/processed/transformer_scores.parquet
 data/processed/session_features.parquet
+data/processed/transformer_severity_fusion_input.parquet
+data/processed/transformer_severity_scores.parquet
+data/processed/fused_severity_scores.parquet
+data/processed/xgb_comparison_scores.parquet
+data/processed/xgb_v2_comparison_scores.parquet
+data/processed/xgb_v2_results.json
+data/processed/fusion_severity_results.json
+data/processed/transformer_severity_results.json
+
+# Scratch / temp
+nul_check.txt
+*.log
 
 # OS specific
 .DS_Store
