@@ -197,7 +197,7 @@ def main():
     print("  PR sweep — raw transformer_score (validation):")
     print(f"  {'threshold':>9}  {'precision':>9}  {'recall':>7}  {'f1':>7}  {'flagged':>8}")
     for row in sweep_raw:
-        marker = " ←" if row["f1"] == max(r["f1"] for r in sweep_raw) else ""
+        marker = " <--" if row["f1"] == max(r["f1"] for r in sweep_raw) else ""
         print(f"  {row['threshold']:>9.2f}  {row['precision']:>9.4f}  "
               f"{row['recall']:>7.4f}  {row['f1']:>7.4f}  {row['n_flagged']:>8}{marker}")
     print()

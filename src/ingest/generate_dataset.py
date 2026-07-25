@@ -14,12 +14,14 @@ import argparse
 import random
 import uuid
 import math
+import json
 from datetime import datetime, timedelta, time
 from dataclasses import dataclass, field
 from typing import List, Dict, Tuple
 
 import numpy as np
 import pandas as pd
+import yaml
 from faker import Faker
 
 # -----------------------------------------------------------------------------
@@ -371,6 +373,12 @@ class NormalBehaviorGenerator:
 # Attack Injector (8 Categories)
 # -----------------------------------------------------------------------------
 
+def _derive_seed(base_seed: int, name: str) -> int:
+    """Derive a deterministic per-injector seed from base_seed + attack-type name.
+    Changing one attack type's campaign count or parameters cannot shift other types."""
+    return (base_seed + abs(hash(name))) % (2 ** 31)
+
+
 class AttackInjector:
     def __init__(self, profiles: List[UserProfile], config: GeneratorConfig):
         self.profiles = profiles
@@ -378,12 +386,40 @@ class AttackInjector:
         self.start_date = datetime.strptime(config.start_date_str, "%Y-%m-%d")
         self.fake = Faker()
 
+        # ── Load attack pattern config ──────────────────────────────────────
+        config_path = os.path.join("config", "attack_patterns.yaml")
+        if os.path.exists(config_path):
+            with open(config_path, "r", encoding="utf-8") as f:
+                self._ap = yaml.safe_load(f)
+        else:
+            print(f"[WARNING] {config_path} not found — using built-in defaults.")
+            self._ap = {"base_seed": config.random_seed}
+
+        # ── Per-injector isolated RNGs (seed isolation fix) ─────────────────
+        # Each attack type gets its own deterministic random.Random and
+        # np.random.Generator so that changing one injector's campaign count
+        # cannot shift another injector's PRNG state.
+        attack_type_names = [
+            "credential_misuse", "brute_force", "lateral_movement",
+            "impossible_travel", "device_spoofing", "credential_stuffing",
+            "low_and_slow_exfiltration", "impossible_travel_sc",
+            "insider_drift", "scheduling",  # scheduling = campaign date selection RNG
+        ]
+        self._rng: Dict[str, random.Random] = {}
+        self._np_rng: Dict[str, np.random.Generator] = {}
+        for name in attack_type_names:
+            seed = _derive_seed(config.random_seed, name)
+            self._rng[name] = random.Random(seed)
+            self._np_rng[name] = np.random.default_rng(seed)
+
     def inject_all_vectors(self) -> List[Dict]:
         attack_events = []
         # Scale to ~10-12 campaigns per thin attack class (G1: increase sample size)
         num_attack_users = max(56, int(len(self.profiles) * self.config.attack_entity_ratio))
-        target_users = random.sample(self.profiles, min(num_attack_users, len(self.profiles) - 10))
-        
+        # Use scheduling RNG for user selection so it's isolated from injector RNGs
+        sched_rng = self._rng["scheduling"]
+        target_users = sched_rng.sample(self.profiles, min(num_attack_users, len(self.profiles) - 10))
+
         malicious_types = [
             "credential_misuse",
             "brute_force",
@@ -395,17 +431,19 @@ class AttackInjector:
             # impossible_travel_sc: same-device stolen-credential variant (G5c)
             "impossible_travel_sc",
         ]
-        
+
         vector_campaign_counts = {at: 0 for at in malicious_types}
-        
+
         for idx, user in enumerate(target_users):
             attack_type = malicious_types[idx % len(malicious_types)]
             vector_campaign_counts[attack_type] += 1
             campaign_num = vector_campaign_counts[attack_type]
-            
-            day_offset = random.randint(2, max(2, self.config.num_days - 2))
+
+            # Per-type scheduling RNG for campaign date — isolated from injector RNGs
+            type_sched_key = attack_type if attack_type in self._rng else "scheduling"
+            day_offset = self._rng[type_sched_key].randint(2, max(2, self.config.num_days - 2))
             campaign_date = self.start_date + timedelta(days=day_offset)
-            
+
             if attack_type == "credential_misuse":
                 attack_events.extend(self._inject_credential_misuse(user, campaign_date, campaign_num))
             elif attack_type == "brute_force":
@@ -421,19 +459,18 @@ class AttackInjector:
                 attack_events.extend(self._inject_device_spoofing(user, campaign_date, campaign_num))
             elif attack_type == "credential_stuffing":
                 # Credential stuffing targets multiple entities at once
-                victim_pool = random.sample(self.profiles, 8)
+                victim_pool = self._rng["credential_stuffing"].sample(self.profiles, 8)
                 attack_events.extend(self._inject_credential_stuffing(victim_pool, campaign_date, campaign_num))
             elif attack_type == "low_and_slow_exfiltration":
                 attack_events.extend(self._inject_low_and_slow_exfiltration(user, campaign_date, campaign_num))
 
         # Inject benign insider_drift edge cases (is_malicious=False)
-
-
         # Campaigns 1-5: original, Campaign 6: harder fan-out mimicking lateral_movement (G2)
+        id_rng = self._rng["insider_drift"]
         remaining = [p for p in self.profiles if p not in target_users]
-        drift_users = random.sample(remaining, min(6, len(remaining)))
+        drift_users = id_rng.sample(remaining, min(6, len(remaining)))
         for d_num, d_user in enumerate(drift_users, 1):
-            d_date = self.start_date + timedelta(days=random.randint(3, 10))
+            d_date = self.start_date + timedelta(days=id_rng.randint(3, 10))
             if d_num <= 5:
                 attack_events.extend(self._inject_insider_drift(d_user, d_date, d_num))
             else:
@@ -445,15 +482,20 @@ class AttackInjector:
     # --- 5 Existing Attack Vectors ---
 
     def _inject_credential_misuse(self, user: UserProfile, date: datetime, campaign_num: int) -> List[Dict]:
+        rng = self._rng["credential_misuse"]
         events = []
         instance_id = f"ATK_CM_{date.strftime('%Y%m%d')}_{campaign_num:03d}"
-        off_hour = random.choice([1, 2, 3, 22, 23])
-        start_time = date.replace(hour=off_hour, minute=random.randint(5, 55), second=0)
+        cm_cfg = self._ap.get("credential_misuse", {})
+        off_hours = cm_cfg.get("off_hour_choices", [1, 2, 3, 22, 23])
+        exfil_min, exfil_max = cm_cfg.get("exfil_events_range", [4, 8])
+        b_min, b_max = cm_cfg.get("bytes_range", [15_000_000, 80_000_000])
+        off_hour = rng.choice(off_hours)
+        start_time = date.replace(hour=off_hour, minute=rng.randint(5, 55), second=0)
         session_id = f"SESS_MAL_{uuid.uuid4().hex[:10]}"
-        
+
         sensitive_targets = [("RES_EXEC_STRATEGY", "Executive"), ("DB_FIN_PAYROLL", "Finance"), ("DB_HR_EMPLOYEE_RECORDS", "HR")]
         foreign_targets = [t for t in sensitive_targets if t[1] != user.entity_dept] or sensitive_targets
-        
+
         events.append({
             "entity_id": user.entity_id, "entity_type": user.entity_type, "entity_role": user.entity_role,
             "entity_dept": user.entity_dept, "timestamp": start_time, "event_type": "logon",
@@ -463,34 +505,39 @@ class AttackInjector:
             "session_id": session_id, "bytes_transferred": 0, "status": "SUCCESS", "is_malicious": True,
             "attack_type": "credential_misuse", "attack_instance_id": instance_id
         })
-        
-        num_exfil = random.randint(4, 8)
+
+        num_exfil = rng.randint(exfil_min, exfil_max)
         for i in range(num_exfil):
-            t_offset = start_time + timedelta(minutes=i*3 + 2)
-            res_id, res_dept = random.choice(foreign_targets)
+            t_offset = start_time + timedelta(minutes=i * 3 + 2)
+            res_id, res_dept = rng.choice(foreign_targets)
             events.append({
                 "entity_id": user.entity_id, "entity_type": user.entity_type, "entity_role": user.entity_role,
                 "entity_dept": user.entity_dept, "timestamp": t_offset, "event_type": "file_access",
                 "auth_method": user.auth_method, "resource_id": res_id, "resource_dept": res_dept,
                 "command_sequence": "read,export_data", "device_id": user.primary_device,
                 "device_fingerprint": user.primary_fingerprint, "geo_country": user.home_country, "geo_ip": user.home_ip,
-                "session_id": session_id, "bytes_transferred": random.randint(15_000_000, 80_000_000),
+                "session_id": session_id, "bytes_transferred": rng.randint(b_min, b_max),
                 "status": "SUCCESS", "is_malicious": True, "attack_type": "credential_misuse", "attack_instance_id": instance_id
             })
-            
+
         return events
 
     def _inject_brute_force(self, user: UserProfile, date: datetime, campaign_num: int) -> List[Dict]:
+        rng = self._rng["brute_force"]
         events = []
         instance_id = f"ATK_BF_{date.strftime('%Y%m%d')}_{campaign_num:03d}"
-        start_time = date.replace(hour=random.randint(7, 21), minute=random.randint(0, 50), second=0)
+        bf_cfg = self._ap.get("brute_force", {})
+        h_min, h_max = bf_cfg.get("hour_range", [7, 21])
+        fc_min, fc_max = bf_cfg.get("fail_count_range", [15, 30])
+        interval_sec = bf_cfg.get("attempt_interval_sec", 6)
+        start_time = date.replace(hour=rng.randint(h_min, h_max), minute=rng.randint(0, 50), second=0)
         session_id = f"SESS_BF_{uuid.uuid4().hex[:10]}"
-        target_res = random.choice(["RES_FIN_ERP", "DB_ENG_CODEBASE", "RES_HR_PORTAL"])
-        attacker_ip = f"198.51.100.{random.randint(10, 200)}"
-        
-        fail_count = random.randint(15, 30)
+        target_res = rng.choice(["RES_FIN_ERP", "DB_ENG_CODEBASE", "RES_HR_PORTAL"])
+        attacker_ip = f"198.51.100.{rng.randint(10, 200)}"
+
+        fail_count = rng.randint(fc_min, fc_max)
         for i in range(fail_count):
-            t_offset = start_time + timedelta(seconds=i*6)
+            t_offset = start_time + timedelta(seconds=i * interval_sec)
             events.append({
                 "entity_id": user.entity_id, "entity_type": user.entity_type, "entity_role": user.entity_role,
                 "entity_dept": user.entity_dept, "timestamp": t_offset, "event_type": "logon",
@@ -499,8 +546,8 @@ class AttackInjector:
                 "geo_country": user.home_country, "geo_ip": attacker_ip, "session_id": session_id,
                 "bytes_transferred": 0, "status": "FAILURE", "is_malicious": True, "attack_type": "brute_force", "attack_instance_id": instance_id
             })
-            
-        succ_time = start_time + timedelta(seconds=fail_count*6 + 10)
+
+        succ_time = start_time + timedelta(seconds=fail_count * interval_sec + 10)
         events.append({
             "entity_id": user.entity_id, "entity_type": user.entity_type, "entity_role": user.entity_role,
             "entity_dept": user.entity_dept, "timestamp": succ_time, "event_type": "logon",
@@ -512,12 +559,17 @@ class AttackInjector:
         return events
 
     def _inject_lateral_movement(self, user: UserProfile, date: datetime, campaign_num: int) -> List[Dict]:
+        rng = self._rng["lateral_movement"]
         events = []
         instance_id = f"ATK_LM_{date.strftime('%Y%m%d')}_{campaign_num:03d}"
-        start_time = date.replace(hour=random.randint(8, 20), minute=random.randint(0, 45), second=0)
+        lm_cfg = self._ap.get("lateral_movement", {})
+        h_min, h_max = lm_cfg.get("hour_range", [8, 20])
+        dev_count = lm_cfg.get("foreign_device_count", 7)
+        hop_min, hop_max = lm_cfg.get("hop_interval_min_range", [1, 4])
+        start_time = date.replace(hour=rng.randint(h_min, h_max), minute=rng.randint(0, 45), second=0)
         session_id = f"SESS_LM_{uuid.uuid4().hex[:10]}"
-        
-        foreign_devices = [f"DEV_FOREIGN_HOST_{campaign_num:02d}_{i:02d}" for i in range(1, 8)]
+
+        foreign_devices = [f"DEV_FOREIGN_HOST_{campaign_num:02d}_{i:02d}" for i in range(1, dev_count + 1)]
         events.append({
             "entity_id": user.entity_id, "entity_type": user.entity_type, "entity_role": user.entity_role,
             "entity_dept": user.entity_dept, "timestamp": start_time, "event_type": "logon",
@@ -527,9 +579,13 @@ class AttackInjector:
             "session_id": session_id, "bytes_transferred": 0, "status": "SUCCESS", "is_malicious": True,
             "attack_type": "lateral_movement", "attack_instance_id": instance_id
         })
-        
+
+        # [ARTIFACT FIX] Hop timing: was always i*2+1 min (duration_min=13, std=0).
+        # Now each hop interval is jittered from hop_interval_min_range.
+        cumulative_offset = 0
         for i, dev in enumerate(foreign_devices):
-            t_offset = start_time + timedelta(minutes=i*2 + 1)
+            cumulative_offset += rng.randint(hop_min, hop_max)
+            t_offset = start_time + timedelta(minutes=cumulative_offset)
             target_res = f"RES_SRV_HOST_{campaign_num:02d}_{i+1:02d}"
             events.append({
                 "entity_id": user.entity_id, "entity_type": user.entity_type, "entity_role": user.entity_role,
@@ -537,18 +593,22 @@ class AttackInjector:
                 "auth_method": user.auth_method, "resource_id": target_res, "resource_dept": "Finance",
                 "command_sequence": "read,execute", "device_id": dev, "device_fingerprint": f"Linux | {dev} | SSHv2",
                 "geo_country": user.home_country, "geo_ip": user.home_ip, "session_id": session_id,
-                "bytes_transferred": random.randint(1_000_000, 10_000_000), "status": "SUCCESS",
+                "bytes_transferred": rng.randint(1_000_000, 10_000_000), "status": "SUCCESS",
                 "is_malicious": True, "attack_type": "lateral_movement", "attack_instance_id": instance_id
             })
         return events
 
     def _inject_impossible_travel(self, user: UserProfile, date: datetime, campaign_num: int) -> List[Dict]:
         """Original impossible travel: fp_mismatch=1 (unrecognized VPN device) + geo_velocity=1."""
+        rng = self._rng["impossible_travel"]
         events = []
         instance_id = f"ATK_IT_{date.strftime('%Y%m%d')}_{campaign_num:03d}"
-        time_us = date.replace(hour=random.randint(8, 18), minute=10, second=0)
+        it_cfg = self._ap.get("impossible_travel", {})
+        h_min, h_max = it_cfg.get("hour_range", [8, 18])
+        gap_min = it_cfg.get("gap_minutes", 12)
+        time_us = date.replace(hour=rng.randint(h_min, h_max), minute=10, second=0)
         session_us = f"SESS_US_{uuid.uuid4().hex[:8]}"
-        
+
         events.append({
             "entity_id": user.entity_id, "entity_type": user.entity_type, "entity_role": user.entity_role,
             "entity_dept": user.entity_dept, "timestamp": time_us, "event_type": "logon",
@@ -557,11 +617,11 @@ class AttackInjector:
             "geo_country": user.home_country, "geo_ip": user.home_ip, "session_id": session_us,
             "bytes_transferred": 0, "status": "SUCCESS", "is_malicious": False, "attack_type": "none", "attack_instance_id": "none"
         })
-        
-        time_foreign = time_us + timedelta(minutes=12)
+
+        time_foreign = time_us + timedelta(minutes=gap_min)
         session_foreign = f"SESS_IMP_{uuid.uuid4().hex[:8]}"
-        foreign_country, foreign_ip = random.choice([("CN", "202.108.22.99"), ("RU", "95.173.136.42")])
-        
+        foreign_country, foreign_ip = rng.choice([("CN", "202.108.22.99"), ("RU", "95.173.136.42")])
+
         events.append({
             "entity_id": user.entity_id, "entity_type": user.entity_type, "entity_role": user.entity_role,
             "entity_dept": user.entity_dept, "timestamp": time_foreign, "event_type": "logon",
@@ -580,10 +640,11 @@ class AttackInjector:
         shifts to a foreign country within 60 minutes of their last authenticated session.
         is_malicious=True, attack_type='impossible_travel'.
         """
+        rng = self._rng["impossible_travel_sc"]
         events = []
         instance_id = f"ATK_ITSC_{date.strftime('%Y%m%d')}_{campaign_num:03d}"
         # Entity's normal morning session (benign, same device + home country)
-        time_legit = date.replace(hour=random.randint(8, 10), minute=5, second=0)
+        time_legit = date.replace(hour=rng.randint(8, 10), minute=5, second=0)
         session_legit = f"SESS_LEGIT_{uuid.uuid4().hex[:8]}"
         events.append({
             "entity_id": user.entity_id, "entity_type": user.entity_type, "entity_role": user.entity_role,
@@ -606,7 +667,7 @@ class AttackInjector:
         # Attacker session: SAME device + fingerprint (token theft), but foreign geo — 45 min later
         time_attack = time_legit + timedelta(minutes=45)
         session_attack = f"SESS_ITSC_{uuid.uuid4().hex[:8]}"
-        foreign_country, foreign_ip = random.choice([("CN", "202.108.22.100"), ("BR", "189.1.100.50"), ("NG", "41.76.111.21")])
+        foreign_country, foreign_ip = rng.choice([("CN", "202.108.22.100"), ("BR", "189.1.100.50"), ("NG", "41.76.111.21")])
         events.append({
             "entity_id": user.entity_id, "entity_type": user.entity_type, "entity_role": user.entity_role,
             "entity_dept": user.entity_dept, "timestamp": time_attack, "event_type": "logon",
@@ -615,20 +676,23 @@ class AttackInjector:
             "command_sequence": "read,export_data", "device_id": user.primary_device,
             "device_fingerprint": user.primary_fingerprint,  # SAME fingerprint (no hardware change)
             "geo_country": foreign_country, "geo_ip": foreign_ip, "session_id": session_attack,
-            "bytes_transferred": random.randint(2_000_000, 15_000_000),
+            "bytes_transferred": rng.randint(2_000_000, 15_000_000),
             "status": "SUCCESS", "is_malicious": True, "attack_type": "impossible_travel",
             "attack_instance_id": instance_id
         })
         return events
 
     def _inject_device_spoofing(self, user: UserProfile, date: datetime, campaign_num: int) -> List[Dict]:
+        rng = self._rng["device_spoofing"]
         events = []
         instance_id = f"ATK_DS_{date.strftime('%Y%m%d')}_{campaign_num:03d}"
-        start_time = date.replace(hour=random.randint(6, 21), minute=20, second=0)
+        ds_cfg = self._ap.get("device_spoofing", {})
+        h_min, h_max = ds_cfg.get("hour_range", [6, 21])
+        start_time = date.replace(hour=rng.randint(h_min, h_max), minute=20, second=0)
         session_id = f"SESS_DS_{uuid.uuid4().hex[:10]}"
-        spoofed_device = f"DEV_ROGUE_{random.randint(100, 999)}"
+        spoofed_device = f"DEV_ROGUE_{rng.randint(100, 999)}"
         spoofed_fp = "FreeBSD 13 | 02:42:FF:FF:FF:FF | HTTPS"  # Spoofed fingerprint!
-        
+
         events.append({
             "entity_id": user.entity_id, "entity_type": user.entity_type, "entity_role": user.entity_role,
             "entity_dept": user.entity_dept, "timestamp": start_time, "event_type": "logon",
@@ -643,17 +707,23 @@ class AttackInjector:
 
     def _inject_credential_stuffing(self, victim_pool: List[UserProfile], date: datetime, campaign_num: int) -> List[Dict]:
         """[NEW] Pattern 1: MANY entity_ids attempting auth from a FEW shared source_ips with high failure rate."""
+        rng = self._rng["credential_stuffing"]
         events = []
         instance_id = f"ATK_CS_{date.strftime('%Y%m%d')}_{campaign_num:03d}"
-        start_time = date.replace(hour=random.randint(1, 5), minute=random.randint(0, 50), second=0)
-        attacker_ip = f"203.0.113.{random.randint(10, 90)}"
-        
-        # 25 rapid failed logon attempts across 8 distinct victim entities
-        for i in range(25):
+        cs_cfg = self._ap.get("credential_stuffing", {})
+        h_min, h_max = cs_cfg.get("hour_range", [1, 5])
+        fc_min, fc_max = cs_cfg.get("fail_count_range", [20, 30])  # [ARTIFACT FIX] was hardcoded 25
+        interval_sec = cs_cfg.get("attempt_interval_sec", 4)
+        start_time = date.replace(hour=rng.randint(h_min, h_max), minute=rng.randint(0, 50), second=0)
+        attacker_ip = f"203.0.113.{rng.randint(10, 90)}"
+
+        # [ARTIFACT FIX] fail_count: was exactly 25 (std=0). Now drawn from config range.
+        fail_count = rng.randint(fc_min, fc_max)
+        for i in range(fail_count):
             victim = victim_pool[i % len(victim_pool)]
-            t_offset = start_time + timedelta(seconds=i*4 + random.randint(0, 2))
+            t_offset = start_time + timedelta(seconds=i * interval_sec + rng.randint(0, 2))
             session_id = f"SESS_CS_{uuid.uuid4().hex[:8]}"
-            
+
             events.append({
                 "entity_id": victim.entity_id,
                 "entity_type": victim.entity_type,
@@ -665,7 +735,7 @@ class AttackInjector:
                 "resource_id": "PORTAL_INTRANET",
                 "resource_dept": "General",
                 "command_sequence": "",
-                "device_id": f"DEV_STUFFER_BOT_{i%3}",
+                "device_id": f"DEV_STUFFER_BOT_{i % 3}",
                 "device_fingerprint": "Linux | 02:42:AC:00:00:99 | HTTP",
                 "geo_country": "RU",
                 "geo_ip": attacker_ip,
@@ -676,10 +746,10 @@ class AttackInjector:
                 "attack_type": "credential_stuffing",
                 "attack_instance_id": instance_id
             })
-            
+
         # 1 successful compromise logon
         chosen_victim = victim_pool[0]
-        succ_time = start_time + timedelta(seconds=115)
+        succ_time = start_time + timedelta(seconds=fail_count * interval_sec + 15)
         succ_session = f"SESS_CS_SUCCESS_{uuid.uuid4().hex[:8]}"
         events.append({
             "entity_id": chosen_victim.entity_id,
@@ -697,29 +767,62 @@ class AttackInjector:
             "geo_country": "RU",
             "geo_ip": attacker_ip,
             "session_id": succ_session,
-            "bytes_transferred": random.randint(5_000_000, 25_000_000),
+            "bytes_transferred": rng.randint(5_000_000, 25_000_000),
             "status": "SUCCESS",
             "is_malicious": True,
             "attack_type": "credential_stuffing",
             "attack_instance_id": instance_id
         })
-        
+
         return events
 
     def _inject_low_and_slow_exfiltration(self, user: UserProfile, start_date: datetime, campaign_num: int) -> List[Dict]:
-        """[NEW] Pattern 2: Gradual, small, off-hours resource access building up incrementally over days/weeks."""
+        """
+        [NEW] Pattern 2: Gradual, small, off-hours resource access building up incrementally.
+
+        ARTIFACT FIXES applied (vs original hardcoded version):
+          - duration_min: drawn from config range (was exactly 15.00 min, std=0)
+          - logoff_count: Bernoulli draw (was always 0 — no logoff ever injected)
+          - bytes_total:  per-campaign randomized growth ladder (was fixed 200_000 * 1.8^step)
+        """
+        rng = self._rng["low_and_slow_exfiltration"]
+        np_rng = self._np_rng["low_and_slow_exfiltration"]
         events = []
         instance_id = f"ATK_LS_{start_date.strftime('%Y%m%d')}_{campaign_num:03d}"
-        
-        # 8 sessions spread over 12 days
-        for step in range(8):
-            sess_date = start_date + timedelta(days=step*1.5 + random.uniform(0, 0.5))
-            start_time = sess_date.replace(hour=random.choice([1, 2, 3, 23]), minute=random.randint(10, 50))
+        ls_cfg = self._ap.get("low_and_slow_exfiltration", {})
+
+        sessions_n = ls_cfg.get("sessions_per_campaign", 8)
+        spread_days = ls_cfg.get("session_spread_days", 12)
+        off_hours = ls_cfg.get("off_hours_choices", [1, 2, 3, 23])
+
+        # [ARTIFACT FIX] Per-campaign randomized bytes growth ladder
+        b_min, b_max = ls_cfg.get("bytes_base_range", [150_000, 300_000])
+        g_min, g_max = ls_cfg.get("bytes_growth_rate_range", [1.6, 2.2])
+        base_bytes = rng.randint(b_min, b_max)
+        growth_rate = g_min + rng.random() * (g_max - g_min)
+
+        # [ARTIFACT FIX] Session duration and offset from config
+        dur_min_lo, dur_min_hi = ls_cfg.get("duration_min_range", [30, 90])
+        act_off_lo, act_off_hi = ls_cfg.get("action_offset_min_range", [10, 40])
+        logoff_prob = ls_cfg.get("logoff_prob", 0.35)
+
+        # 8 sessions spread over ~12 days
+        for step in range(sessions_n):
+            day_step = (step * spread_days / max(sessions_n - 1, 1)) + rng.uniform(0, 0.5)
+            sess_date = start_date + timedelta(days=day_step)
+            start_time = sess_date.replace(
+                hour=rng.choice(off_hours), minute=rng.randint(10, 50), second=0, microsecond=0
+            )
             session_id = f"SESS_LS_{uuid.uuid4().hex[:8]}"
-            
-            # Transfer size trends upward: 200KB -> 1.5MB -> 4MB -> 12MB
-            bytes_tx = int(200_000 * (1.8 ** step))
-            
+
+            # Per-campaign stochastic bytes ladder
+            bytes_tx = int(base_bytes * (growth_rate ** step))
+
+            # [ARTIFACT FIX] Session duration: drawn from range, not hardcoded 15.0 min
+            duration_min = dur_min_lo + rng.random() * (dur_min_hi - dur_min_lo)
+            # [ARTIFACT FIX] Action offset: drawn from range, not hardcoded 15 min
+            action_offset_min = act_off_lo + rng.random() * (act_off_hi - act_off_lo)
+
             events.append({
                 "entity_id": user.entity_id,
                 "entity_type": user.entity_type,
@@ -742,13 +845,13 @@ class AttackInjector:
                 "attack_type": "low_and_slow_exfiltration",
                 "attack_instance_id": instance_id
             })
-            
+
             events.append({
                 "entity_id": user.entity_id,
                 "entity_type": user.entity_type,
                 "entity_role": user.entity_role,
                 "entity_dept": user.entity_dept,
-                "timestamp": start_time + timedelta(minutes=15),
+                "timestamp": start_time + timedelta(minutes=action_offset_min),
                 "event_type": "file_access",
                 "auth_method": user.auth_method,
                 "resource_id": "RES_EXEC_FINANCIALS",
@@ -765,7 +868,33 @@ class AttackInjector:
                 "attack_type": "low_and_slow_exfiltration",
                 "attack_instance_id": instance_id
             })
-            
+
+            # [ARTIFACT FIX] Logoff event: Bernoulli(logoff_prob) — was always 0
+            if rng.random() < logoff_prob:
+                logoff_time = start_time + timedelta(minutes=duration_min)
+                events.append({
+                    "entity_id": user.entity_id,
+                    "entity_type": user.entity_type,
+                    "entity_role": user.entity_role,
+                    "entity_dept": user.entity_dept,
+                    "timestamp": logoff_time,
+                    "event_type": "logoff",
+                    "auth_method": user.auth_method,
+                    "resource_id": "RES_EXEC_FINANCIALS",
+                    "resource_dept": "Executive",
+                    "command_sequence": "",
+                    "device_id": user.primary_device,
+                    "device_fingerprint": user.primary_fingerprint,
+                    "geo_country": user.home_country,
+                    "geo_ip": user.home_ip,
+                    "session_id": session_id,
+                    "bytes_transferred": 0,
+                    "status": "SUCCESS",
+                    "is_malicious": True,
+                    "attack_type": "low_and_slow_exfiltration",
+                    "attack_instance_id": instance_id
+                })
+
         return events
 
 
@@ -968,37 +1097,149 @@ class AttackInjector:
 # Main Orchestration & Export
 # -----------------------------------------------------------------------------
 
+def auto_split_manifest(df: pd.DataFrame, output_dir: str, test_campaigns_per_type: int = 3,
+                         normal_cutoff_date: str = None) -> dict:
+    """
+    Auto-compute the train/test split manifest from the generated dataset.
+    Replaces the hardcoded SPLIT_MANIFEST in build_features.py.
+
+    Strategy:
+      - Malicious campaigns: sort by first event date per campaign, assign
+        last `test_campaigns_per_type` per attack_type to test, rest to train.
+      - insider_drift (is_malicious=False): earliest 4 campaign IDs → train,
+        latest 2 → test (preserving G2 logic).
+      - Normal traffic: chronological split using normal_cutoff_date.
+    """
+    manifest = {
+        "split_strategy": {
+            "malicious": (
+                f"Campaign-level hold-out — {test_campaigns_per_type} latest-dated campaigns per "
+                "attack_type go to test. No event-level leakage."
+            ),
+            "normal": "Chronological split — events before normal_cutoff_date go to train.",
+            "insider_drift": (
+                "Benign edge case (is_malicious=False). Earliest 4 campaigns → train, latest 2 → test."
+            ),
+            "seed": "auto (derived from generated dataset campaign dates)",
+        },
+        "train_campaigns": {},
+        "test_campaigns": {},
+        "insider_drift_train": [],
+        "insider_drift_test": [],
+    }
+
+    # --- Malicious campaigns (is_malicious=True) ---
+    mal_df = df[(df["is_malicious"] == True) & (df["attack_type"] != "none")].copy()
+    # Get first event timestamp per campaign
+    campaign_dates = (
+        mal_df.groupby(["attack_type", "attack_instance_id"])["timestamp"]
+        .min()
+        .reset_index()
+        .rename(columns={"timestamp": "first_event"})
+    )
+
+    # Derive campaign prefix (portion before date: e.g., 'ATK_IT_' vs 'ATK_ITSC_')
+    campaign_dates["prefix"] = campaign_dates["attack_instance_id"].apply(
+        lambda cid: cid.rsplit("_", 2)[0] + "_" if "_" in cid else cid
+    )
+
+    for attack_type, grp in campaign_dates.groupby("attack_type"):
+        prefixes = grp["prefix"].unique()
+        if len(prefixes) > 1:
+            # Multi-prefix attack type (e.g., impossible_travel with ATK_IT_ and ATK_ITSC_):
+            # Reserve 2 latest-dated campaigns PER PREFIX for test split to guarantee sub-variant representation.
+            test_ids = []
+            train_ids = []
+            for pfx, pfx_grp in grp.groupby("prefix"):
+                pfx_sorted = pfx_grp.sort_values("first_event")["attack_instance_id"].tolist()
+                n_test_pfx = min(2, len(pfx_sorted))
+                test_ids.extend(pfx_sorted[-n_test_pfx:])
+                train_ids.extend(pfx_sorted[:-n_test_pfx] if n_test_pfx < len(pfx_sorted) else [])
+            manifest["train_campaigns"][attack_type] = train_ids
+            manifest["test_campaigns"][attack_type] = test_ids
+        else:
+            # Single-prefix attack type (common case): pick N latest campaigns overall
+            campaigns_sorted = grp.sort_values("first_event")["attack_instance_id"].tolist()
+            n_test = min(test_campaigns_per_type, len(campaigns_sorted))
+            test_ids = campaigns_sorted[-n_test:]
+            train_ids = campaigns_sorted[:-n_test] if n_test < len(campaigns_sorted) else []
+            manifest["train_campaigns"][attack_type] = train_ids
+            manifest["test_campaigns"][attack_type] = test_ids
+
+    # --- insider_drift (is_malicious=False, attack_type='insider_drift') ---
+    drift_df = df[(df["is_malicious"] == False) & (df["attack_type"] == "insider_drift")].copy()
+    if len(drift_df) > 0:
+        drift_dates = (
+            drift_df.groupby("attack_instance_id")["timestamp"]
+            .min()
+            .reset_index()
+            .sort_values("timestamp")
+        )
+        all_drift = drift_dates["attack_instance_id"].tolist()
+        n_drift_test = min(2, len(all_drift))
+        manifest["insider_drift_train"] = all_drift[:-n_drift_test] if n_drift_test < len(all_drift) else all_drift
+        manifest["insider_drift_test"] = all_drift[-n_drift_test:]
+
+    # --- Normal traffic cutoff ---
+    if normal_cutoff_date is None:
+        # Default: middle of the simulation window based on actual data dates
+        min_ts = df[df["attack_type"] == "none"]["timestamp"].min()
+        max_ts = df[df["attack_type"] == "none"]["timestamp"].max()
+        midpoint = min_ts + (max_ts - min_ts) * 0.60  # ~60% into the window → train
+        normal_cutoff_date = midpoint.strftime("%Y-%m-%dT%H:%M:%S")
+    manifest["normal_cutoff_date"] = normal_cutoff_date
+
+    # --- Write to file ---
+    manifest_path = os.path.join(output_dir, "split_manifest.json")
+    with open(manifest_path, "w", encoding="utf-8") as f:
+        json.dump(manifest, f, indent=2)
+    print(f"[OK] Auto-generated split manifest -> {manifest_path}")
+
+    # Summary printout
+    for atype in sorted(manifest["train_campaigns"].keys()):
+        train_n = len(manifest["train_campaigns"].get(atype, []))
+        test_n = len(manifest["test_campaigns"].get(atype, []))
+        print(f"     {atype:35s}: {train_n} train / {test_n} test campaigns")
+    print(f"     {'insider_drift':35s}: {len(manifest['insider_drift_train'])} train / {len(manifest['insider_drift_test'])} test campaigns")
+
+    return manifest
+
+
 def generate_dataset(config: GeneratorConfig) -> Tuple[pd.DataFrame, str]:
     print(f"[*] Initializing ARGUS Synthetic Telemetry Generator (Seed={config.random_seed})...")
-    
+
     profile_gen = UserProfileGenerator(seed=config.random_seed)
     profiles = profile_gen.generate_profiles(config.num_users)
     print(f"[+] Generated {len(profiles)} synthetic user profiles across {len(DEPARTMENTS)} departments.")
-    
+
     normal_gen = NormalBehaviorGenerator(profiles, config)
     normal_events = normal_gen.generate()
     print(f"[+] Generated {len(normal_events):,} normal baseline telemetry events across {config.num_days} days.")
-    
+
     injector = AttackInjector(profiles, config)
     attack_events = injector.inject_all_vectors()
     print(f"[+] Injected {len(attack_events):,} telemetry events across 8 attack & pattern categories.")
-    
+
     all_events = normal_events + attack_events
     df = pd.DataFrame(all_events)
     df["timestamp"] = pd.to_datetime(df["timestamp"])
     df = df.sort_values(by="timestamp").reset_index(drop=True)
-    
+
     os.makedirs(config.output_dir, exist_ok=True)
     parquet_path = os.path.join(config.output_dir, "full_dataset.parquet")
     df.to_parquet(parquet_path, index=False)
     print(f"[OK] Saved full dataset to {parquet_path} ({len(df):,} total rows, {len(df.columns)} columns).")
-    
+
+    # Auto-generate split_manifest.json from actual campaign dates in the dataset
+    print("[*] Auto-computing train/test split manifest from generated campaign dates...")
+    auto_split_manifest(df, config.output_dir)
+
     summary_md = create_summary_markdown(df, profiles, config)
     summary_path = os.path.join(config.output_dir, "dataset_summary.md")
     with open(summary_path, "w", encoding="utf-8") as f:
         f.write(summary_md)
     print(f"[OK] Saved dataset summary doc to {summary_path}.")
-    
+
     return df, summary_path
 
 def create_summary_markdown(df: pd.DataFrame, profiles: List[UserProfile], config: GeneratorConfig) -> str:

@@ -1,18 +1,18 @@
 {
   "overall": {
-    "total_test": 3282,
-    "malicious_test": 120,
-    "normal_test": 3162,
-    "precision": 0.6987,
-    "recall": 0.9083,
-    "f1": 0.7899,
-    "pr_auc": 0.8585,
-    "roc_auc": 0.914,
+    "total_test": 3289,
+    "malicious_test": 122,
+    "normal_test": 3167,
+    "precision": 0.9023,
+    "recall": 0.9836,
+    "f1": 0.9412,
+    "pr_auc": 0.9532,
+    "roc_auc": 0.9947,
     "p_at_1pct": 1.0,
-    "p_at_3pct": 0.9388,
-    "p_at_5pct": 0.6646,
-    "tier1_flagged": 104,
-    "tier2_flagged": 52,
+    "p_at_3pct": 0.9592,
+    "p_at_5pct": 0.7378,
+    "tier1_flagged": 105,
+    "tier2_flagged": 28,
     "tier3_flagged": 0,
     "alert_threshold": 50
   },
@@ -28,8 +28,8 @@
       "recall": 1.0
     },
     "credential_stuffing": {
-      "total": 78,
-      "flagged": 78,
+      "total": 83,
+      "flagged": 83,
       "recall": 1.0
     },
     "device_spoofing": {
@@ -38,8 +38,8 @@
       "recall": 1.0
     },
     "impossible_travel": {
-      "total": 6,
-      "flagged": 6,
+      "total": 3,
+      "flagged": 3,
       "recall": 1.0
     },
     "lateral_movement": {
@@ -49,15 +49,15 @@
     },
     "low_and_slow_exfiltration": {
       "total": 24,
-      "flagged": 13,
-      "recall": 0.5417
+      "flagged": 22,
+      "recall": 0.9167
     }
   },
   "hard_rule_coverage": {
     "impossible_travel": {
-      "total": 6,
-      "tier1": 6,
-      "flagged": 6,
+      "total": 3,
+      "tier1": 3,
+      "flagged": 3,
       "recall": 1.0,
       "tier1_rate": 1.0
     },
@@ -71,14 +71,14 @@
   },
   "insider_drift_fpr": {
     "total": 10,
-    "flagged": 5,
-    "fpr": 0.5,
-    "score_mean": 46.7,
-    "score_max": 78
+    "flagged": 4,
+    "fpr": 0.4,
+    "score_mean": 27.6,
+    "score_max": 57
   },
   "classifier_accuracy": {
-    "total_malicious_test_sessions": 120,
-    "correct_label": 111,
-    "accuracy": 0.925
+    "total_malicious_test_sessions": 122,
+    "correct_label": 106,
+    "accuracy": 0.8689
   }
 }
