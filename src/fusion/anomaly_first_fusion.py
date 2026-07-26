@@ -33,8 +33,8 @@ Scoring formula
                      + new_device_edge * 0.10
                      + ip_fan_in_norm * 0.10, 0, 0.60)
 
-  Tier 3 fused = base_score * 54
-  Tier 2 fused = clip(base_score + graph_boost, 0.55, 1.0) * 89
+  Tier 3/2 fused = Calibrated Logistic Regression mapping transformer_score, 
+                   if_norm, and graph_boost to a [0-100] probability curve.
   Tier 1 fused = 90 + min(hard_rule_count * 3, 10)
 
 Output columns added per session:
