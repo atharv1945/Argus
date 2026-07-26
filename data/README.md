@@ -40,16 +40,18 @@ This schema represents real-world enterprise log pipelines (Splunk CIM, Elastic 
 
 ARGUS explicitly models 7 attack vectors and 1 non-malicious edge case (`insider_drift`):
 
-```
+```text
 [Attack & Pattern Taxonomy]
   ├── 1. Credential Misuse       --> Off-hours access to sensitive cross-dept resources under valid user credentials
   ├── 2. Brute Force             --> Rapid succession of failed logons for 1 user followed by 1 successful compromise
   ├── 3. Lateral Movement        --> High-fanout access across multiple foreign host devices & servers in minutes
   ├── 4. Impossible Travel       --> Sequential logons under same entity from physically distant countries within minutes
+  │                                  └── Includes Stolen Credential variant (ATK_ITSC): valid fingerprint + foreign geo
   ├── 5. Device Spoofing         --> Valid session initiated from an unrecognized, non-fingerprinted rogue device ID
-  ├── 6. Credential Stuffing     --> [NEW] MANY entity IDs attempting auth from a FEW shared attacker IPs with high failure rates
-  ├── 7. Low & Slow Exfiltration --> [NEW] Gradual, small off-hours resource access building up incrementally over weeks
-  └── 8. Insider Drift (Benign)  --> [NEW] Legitimate entity expanding privilege/resource footprint (is_malicious=False, FP bait)
+  ├── 6. Credential Stuffing     --> MANY entity IDs attempting auth from a FEW shared attacker IPs with high failure rates
+  ├── 7. Low & Slow Exfiltration --> Gradual, small off-hours resource access building up incrementally over weeks
+  └── 8. Insider Drift (Benign)  --> Legitimate entity expanding privilege/resource footprint (is_malicious=False, FP bait)
+                                     └── Includes Harder variant: cross-department resource fan-out
 ```
 
 ---
