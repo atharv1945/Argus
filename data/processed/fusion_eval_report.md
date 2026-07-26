@@ -6,13 +6,13 @@
 
 | Metric | Value |
 |--------|-------|
-| Threshold | 90 / 100 |
+| Threshold | 75 / 100 |
 | Total test sessions | 3,280 |
 | Malicious sessions | 117 |
 | Normal sessions | 3,163 |
-| Precision | 0.9435 |
+| Precision | 0.9213 |
 | Recall | 1.0000 |
-| F1 | 0.9710 |
+| F1 | 0.9590 |
 | PR-AUC | 0.9932 |
 | ROC-AUC | 0.9999 |
 | Precision@top-1% | 1.0000 |
@@ -25,7 +25,7 @@
 |------|-------|-------------|
 | 1 (Hard rules) | 99 | fp_mismatch / geo_velocity → 90–100 |
 | 2 (Graph-boosted) | 25 | lateral/relational evidence → 55–89 |
-| 3 (Model-driven) | 0 | IF + Transformer blend → 0–54 |
+| 3 (Model-driven) | 3 | IF + Transformer blend → 0–54 |
 
 ## Per-Attack-Type Recall
 
@@ -51,8 +51,8 @@
 | Metric | Value |
 |--------|-------|
 | Total insider_drift test sessions | 10 |
-| Flagged (FP) | 1 |
-| FPR | 0.1 |
+| Flagged (FP) | 3 |
+| FPR | 0.3 |
 | Mean fused score | 33.0 |
 | Max fused score | 93 |
 
