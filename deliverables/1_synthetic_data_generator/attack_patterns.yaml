@@ -1,0 +1,129 @@
+# ARGUS Attack Pattern Configuration
+# ====================================
+# Tunable parameters for each attack injector in generate_dataset.py.
+# Edit this file to adjust behavioral ranges WITHOUT touching Python code.
+#
+# LEGEND:
+#   range: [min, max]  — drawn from Uniform(min, max) per session/campaign
+#   fixed: value       — intentional design constant (behavioral definition)
+#   prob: 0.0–1.0      — Bernoulli probability (per session draw)
+#
+# Design constants (marked "INTENTIONAL") reflect the attack's behavioral
+# definition and should NOT be changed unless the attack concept itself changes.
+# Parameters marked "ARTIFACT FIX" were previously hardcoded zero-variance
+# constants that are now corrected to draw from realistic distributions.
+
+base_seed: 42
+test_campaigns_per_type: 3   # Number of most-recent campaigns reserved for test split
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 1. low_and_slow_exfiltration
+#    Concept: gradual, covert off-hours exfiltration building up over days.
+# ─────────────────────────────────────────────────────────────────────────────
+low_and_slow_exfiltration:
+  sessions_per_campaign: 8
+  session_spread_days: 12             # total span: sessions distributed over this many days
+
+  # [INTENTIONAL] Off-hours execution — definitional for covert exfiltration
+  off_hours_choices: [1, 2, 3, 23]   # hours to pick from for session start
+
+  # [ARTIFACT FIX] Duration of each individual session (logon → logoff or disconnect)
+  # Previous: hardcoded exactly 15.00 min (std=0). Fixed to a realistic covert range.
+  # Real attacker: short-to-medium sessions to avoid triggering long-session anomaly rules.
+  duration_min_range: [30, 90]        # minutes; drawn Uniform per session
+
+  # [ARTIFACT FIX] Timing of the file_access event within the session
+  # Previous: hardcoded exactly 15 min after logon. Fixed to realistic offset.
+  action_offset_min_range: [10, 40]   # minutes after session start; drawn Uniform per session
+
+  # [ARTIFACT FIX] Logoff event injection
+  # Previous: logoff_count=0 for ALL sessions (no logoff ever). Fixed with Bernoulli draw.
+  # Real covert sessions sometimes end with explicit logoff, sometimes just disconnect.
+  logoff_prob: 0.35                   # probability of injecting a logoff event per session
+
+  # [ARTIFACT FIX] Bytes transferred per session: per-campaign randomized growth ladder
+  # Previous: fixed ladder 200_000 * 1.8^step (identical across all campaigns).
+  # Now: base_bytes and growth_rate are drawn per-campaign so campaigns differ.
+  bytes_base_range: [150000, 300000]  # base bytes for step=0; drawn Uniform per campaign
+  bytes_growth_rate_range: [1.6, 2.2] # multiplicative growth per step; drawn Uniform per campaign
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 2. credential_misuse
+#    Concept: insider using valid credentials off-hours on foreign dept resources.
+# ─────────────────────────────────────────────────────────────────────────────
+credential_misuse:
+  # [INTENTIONAL] Off-hours — definitional (insider abuses access after hours)
+  off_hour_choices: [1, 2, 3, 22, 23]
+
+  # Already had variance in original code — kept as-is
+  exfil_events_range: [4, 8]             # number of file_access events per session
+  bytes_range: [15000000, 80000000]      # bytes per file_access event
+
+  # logoff_count: 0 for all sessions — intentional (rushed off-hours session, no clean exit)
+  # cmd_seq: hardcoded to "read,escalate_privilege,execute" / "read,export_data" — intentional
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 3. brute_force
+#    Concept: rapid repeated failed logons against a single account.
+# ─────────────────────────────────────────────────────────────────────────────
+brute_force:
+  # [INTENTIONAL] Mixed hours — brute force can happen at any time of day
+  hour_range: [7, 21]
+
+  # Already had variance
+  fail_count_range: [15, 30]   # number of failed attempts; drawn Uniform per campaign
+
+  # Timing: attempts spaced 6 seconds apart (fast automated attack) — intentional
+  attempt_interval_sec: 6
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 4. lateral_movement
+#    Concept: attacker pivoting across 7 internal hosts after initial compromise.
+# ─────────────────────────────────────────────────────────────────────────────
+lateral_movement:
+  # [INTENTIONAL] Foreign device hop count = 7 — behavioral definition of the pattern
+  foreign_device_count: 7
+
+  # [INTENTIONAL] Mixed hours — lateral movement during business hours
+  hour_range: [8, 20]
+
+  # [ARTIFACT FIX] Hop timing: previously always exactly i*2+1 min → duration_min=13 (std=0)
+  # Fixed: per-hop offset is jittered so total session duration varies
+  hop_interval_min_range: [1, 4]   # minutes per hop; drawn Uniform per hop
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 5. impossible_travel
+#    Concept: sequential logons from geographically distant countries within minutes.
+# ─────────────────────────────────────────────────────────────────────────────
+impossible_travel:
+  # [INTENTIONAL] Mixed hours for legitimate session; foreign logon 12 min later
+  hour_range: [8, 18]
+  gap_minutes: 12   # minutes between legitimate and attacker logon
+
+  # duration_min=0 for the malicious session: it's a single logon event — intentional
+  # The behavioral signal is the geo velocity, not session length
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 6. device_spoofing
+#    Concept: logon from an unrecognized rogue device with spoofed fingerprint.
+# ─────────────────────────────────────────────────────────────────────────────
+device_spoofing:
+  # [INTENTIONAL] Mixed hours — spoofing can happen at any time
+  hour_range: [6, 21]
+
+  # duration_min=0: single logon event — intentional (attack IS the logon from rogue device)
+  # No additional session activity needed to trigger fp_mismatch hard rule
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 7. credential_stuffing
+#    Concept: mass credential attack across many accounts from few shared IPs.
+# ─────────────────────────────────────────────────────────────────────────────
+credential_stuffing:
+  # [INTENTIONAL] Off-hours (1-5am) — large-scale bot attacks run in low-traffic windows
+  hour_range: [1, 5]
+
+  # [ARTIFACT FIX] fail_count was exactly 25 (std=0). Fixed to small range.
+  fail_count_range: [20, 30]     # failed logon attempts per campaign; drawn Uniform
+
+  victim_pool_size: 8            # distinct victim accounts targeted per campaign
+  attempt_interval_sec: 4        # seconds between attempts (fast bot cadence) — intentional

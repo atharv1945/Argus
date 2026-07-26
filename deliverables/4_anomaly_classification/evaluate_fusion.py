@@ -1,0 +1,377 @@
+"""
+ARGUS Phase 3 — End-to-End Fusion Evaluation
+=============================================
+Runs the complete Phase 3 pipeline:
+
+  1. Build graph features   (src/graph/entity_graph.py)
+  2. Compute fused scores   (src/fusion/anomaly_first_fusion.py)
+  3. Evaluate on test split:
+       - Overall detection: precision, recall, F1, PR-AUC at multiple thresholds
+       - Precision@top-K% (K=1,3,5): how many of the top-K% highest-risk
+         sessions are truly malicious
+       - Per-attack-type recall: does the fusion layer lift missing attack types?
+       - insider_drift false-positive rate: are benign drift sessions in the
+         alert zone (fused_risk_score >= threshold)?
+       - Hard-rule coverage: impossible_travel and device_spoofing specifically
+       - Tier breakdown: what fraction of alerts come from each tier?
+       - Predicted vs actual attack type confusion (rule classifier accuracy)
+
+  4. Save results to:
+       - data/processed/fusion_results.json      (machine-readable metrics)
+       - data/processed/fusion_eval_report.md    (human-readable summary)
+
+Usage:
+    python src/fusion/evaluate_fusion.py
+"""
+
+import os
+import json
+import numpy as np
+import pandas as pd
+from sklearn.metrics import (
+    precision_score, recall_score, f1_score,
+    average_precision_score, roc_auc_score,
+    confusion_matrix,
+)
+
+from src.graph.entity_graph import build_graph_features
+from src.fusion.anomaly_first_fusion import load_and_merge, compute_fused_risk
+from src.fusion.build_cohort_features import build_ip_cohort_features
+from src.fusion.alert_dedup import dedup_alerts
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Evaluation helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+ALERT_THRESHOLD = 75   # fused_risk_score >= this → flagged
+
+def precision_at_top_k(scores: pd.Series, labels: pd.Series, k_pct: float) -> float:
+    n_top = max(1, int(len(scores) * k_pct / 100))
+    top_idx = scores.nlargest(n_top).index
+    return float(labels.loc[top_idx].mean())
+
+
+def per_class_recall(df: pd.DataFrame, threshold: int = ALERT_THRESHOLD) -> dict:
+    """Recall by attack_type on test sessions that are truly malicious."""
+    results = {}
+    malicious = df[df["is_malicious"] & (df["attack_type"] != "none") & (df["split"] == "test")]
+    for atk, grp in malicious.groupby("attack_type"):
+        flagged = (grp["fused_risk_score"] >= threshold).sum()
+        results[atk] = {
+            "total": len(grp),
+            "flagged": int(flagged),
+            "recall": round(flagged / max(len(grp), 1), 4),
+        }
+    return results
+
+
+def insider_drift_fpr(df: pd.DataFrame, threshold: int = ALERT_THRESHOLD) -> dict:
+    """FPR for insider_drift (benign edge case)."""
+    drift = df[
+        (df["attack_type"] == "insider_drift")
+        & (df["split"] == "test")
+        & (~df["is_malicious"])
+    ]
+    if len(drift) == 0:
+        return {"total": 0, "flagged": 0, "fpr": None}
+    flagged = (drift["fused_risk_score"] >= threshold).sum()
+    return {
+        "total": len(drift),
+        "flagged": int(flagged),
+        "fpr": round(float(flagged) / len(drift), 4),
+        "score_mean": round(float(drift["fused_risk_score"].mean()), 2),
+        "score_max":  int(drift["fused_risk_score"].max()),
+    }
+
+
+def hard_rule_coverage(df: pd.DataFrame) -> dict:
+    """Coverage for attacks that should be caught by hard rules."""
+    hard_types = ["impossible_travel", "device_spoofing"]
+    results = {}
+    test = df[df["split"] == "test"]
+    for atk in hard_types:
+        grp = test[test["attack_type"] == atk]
+        if len(grp) == 0:
+            results[atk] = {"total": 0}
+            continue
+        tier1 = (grp["fusion_tier"] == 1).sum()
+        flagged = (grp["fused_risk_score"] >= ALERT_THRESHOLD).sum()
+        results[atk] = {
+            "total":   len(grp),
+            "tier1":   int(tier1),
+            "flagged": int(flagged),
+            "recall":  round(flagged / len(grp), 4),
+            "tier1_rate": round(tier1 / max(len(grp), 1), 4),
+        }
+    return results
+
+
+def classifier_accuracy(df: pd.DataFrame) -> dict:
+    """How accurately does the rule classifier label attack types?"""
+    test_mal = df[
+        df["is_malicious"] & (df["attack_type"] != "none") & (df["split"] == "test")
+    ]
+    if len(test_mal) == 0:
+        return {}
+    correct = (test_mal["predicted_attack_type"] == test_mal["attack_type"]).sum()
+    return {
+        "total_malicious_test_sessions": len(test_mal),
+        "correct_label": int(correct),
+        "accuracy": round(correct / len(test_mal), 4),
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Report formatter
+# ─────────────────────────────────────────────────────────────────────────────
+
+def build_markdown_report(metrics: dict) -> str:
+    ov = metrics["overall"]
+    lines = [
+        "# ARGUS Phase 3 Fusion Evaluation Report",
+        "",
+        "> Generated by `src/fusion/evaluate_fusion.py`",
+        "",
+        "## Overall Detection (Test Split)",
+        "",
+        f"| Metric | Value |",
+        f"|--------|-------|",
+        f"| Threshold | {ALERT_THRESHOLD} / 100 |",
+        f"| Total test sessions | {ov['total_test']:,} |",
+        f"| Malicious sessions | {ov['malicious_test']} |",
+        f"| Normal sessions | {ov['normal_test']:,} |",
+        f"| Precision | {ov['precision']:.4f} |",
+        f"| Recall | {ov['recall']:.4f} |",
+        f"| F1 | {ov['f1']:.4f} |",
+        f"| PR-AUC | {ov['pr_auc']:.4f} |",
+        f"| ROC-AUC | {ov['roc_auc']:.4f} |",
+        f"| Precision@top-1% | {ov['p_at_1pct']:.4f} |",
+        f"| Precision@top-3% | {ov['p_at_3pct']:.4f} |",
+        f"| Precision@top-5% | {ov['p_at_5pct']:.4f} |",
+        "",
+        "## Tier Distribution (Test Flagged Sessions)",
+        "",
+        "| Tier | Count | Description |",
+        "|------|-------|-------------|",
+        f"| 1 (Hard rules) | {ov.get('tier1_flagged', '?')} | fp_mismatch / geo_velocity → 90–100 |",
+        f"| 2 (Graph-boosted) | {ov.get('tier2_flagged', '?')} | lateral/relational evidence → 55–89 |",
+        f"| 3 (Model-driven) | {ov.get('tier3_flagged', '?')} | IF + Transformer blend → 0–54 |",
+        "",
+        "## Per-Attack-Type Recall",
+        "",
+        "| Attack Type | Test Sessions | Flagged | Recall |",
+        "|-------------|--------------|---------|--------|",
+    ]
+
+    for atk, v in sorted(metrics["per_class_recall"].items()):
+        lines.append(f"| {atk} | {v['total']} | {v['flagged']} | {v['recall']:.4f} |")
+
+    lines += [
+        "",
+        "## Hard-Rule Coverage (Tier 1 Targets)",
+        "",
+        "| Attack Type | Total | Tier-1 | Flagged | Recall | Tier-1 Rate |",
+        "|-------------|-------|--------|---------|--------|-------------|",
+    ]
+    for atk, v in metrics["hard_rule_coverage"].items():
+        if v.get("total", 0) == 0:
+            lines.append(f"| {atk} | 0 | — | — | — | — |")
+        else:
+            lines.append(
+                f"| {atk} | {v['total']} | {v['tier1']} | {v['flagged']} "
+                f"| {v['recall']:.4f} | {v['tier1_rate']:.4f} |"
+            )
+
+    id_fp = metrics["insider_drift_fpr"]
+    lines += [
+        "",
+        "## Insider Drift — False Positive Rate",
+        "",
+        f"| Metric | Value |",
+        f"|--------|-------|",
+        f"| Total insider_drift test sessions | {id_fp.get('total', 0)} |",
+        f"| Flagged (FP) | {id_fp.get('flagged', 0)} |",
+        f"| FPR | {id_fp.get('fpr', 'N/A')} |",
+        f"| Mean fused score | {id_fp.get('score_mean', 'N/A')} |",
+        f"| Max fused score | {id_fp.get('score_max', 'N/A')} |",
+        "",
+        "## Rule Classifier Accuracy",
+        "",
+    ]
+    ca = metrics["classifier_accuracy"]
+    if ca:
+        lines += [
+            f"| Metric | Value |",
+            f"|--------|-------|",
+            f"| Total malicious test sessions | {ca['total_malicious_test_sessions']} |",
+            f"| Correctly labeled | {ca['correct_label']} |",
+            f"| Accuracy | {ca['accuracy']:.4f} |",
+        ]
+    else:
+        lines.append("_No malicious test sessions found._")
+
+    lines += [
+        "",
+        "## Key Observations",
+        "",
+        "- **Tier 1** sessions are `impossible_travel` and `device_spoofing` — both detected via "
+        "hard-rule triggers independent of model scores.",
+        "- **Tier 2** sessions include `lateral_movement` boosted by the graph layer's "
+        "`lateral_hop_score` and `entity_fan_out` signals.",
+        "- **insider_drift** (benign) should NOT appear in Tier 1 or Tier 2 alerts; "
+        "a low FPR here validates the fusion design.",
+        "- **Graph layer** is active (timestamp bug fixed): `new_device_edge_count` "
+        "distinguishes `lateral_movement` (7 new foreign hosts) from "
+        "`insider_drift` Campaign 1 (0 new devices).",
+        "- **Shared-IP fan-in** (`ip_entity_fan_in >= 3 + failure_ratio >= 0.5`) "
+        "provides behaviorally-correct `credential_stuffing` detection independent "
+        "of the `fp_mismatch` proxy.",
+        "- **Campaign 4 guard** (`new_device_edge_count >= 2`): one-time hardware "
+        "upgrades (count=1, event_count=2) are no longer escalated to Tier 1.",
+    ]
+
+    return "\n".join(lines)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Main pipeline
+# ─────────────────────────────────────────────────────────────────────────────
+
+def main():
+    raw_path  = "data/processed/full_dataset.parquet"
+    sess_path = "data/processed/session_features.parquet"
+
+    print("[*] Loading raw and session data...")
+    raw_df  = pd.read_parquet(raw_path)
+    sess_df = pd.read_parquet(sess_path)
+    raw_df["timestamp"] = pd.to_datetime(raw_df["timestamp"])
+
+    # ── Step 1: Build graph features (always rebuild — timestamp fix is active) ──
+    graph_path = "data/processed/graph_features.parquet"
+    print("[*] Building graph features (forced rebuild after timestamp fix)...")
+    gf = build_graph_features(raw_df, sess_df)
+    meta_cols = ["session_id", "entity_id", "entity_type", "entity_dept",
+                 "split", "is_malicious", "attack_type", "attack_instance_id"]
+    gf_full = gf.merge(sess_df[meta_cols], on="session_id", how="left")
+    gf_full.to_parquet(graph_path, index=False)
+    print(f"[OK] Graph features saved → {graph_path}")
+
+    # ── Step 2: Build cohort features (shared-IP fan-in) ────────────────────
+    cohort_path = "data/processed/cohort_features.parquet"
+    print("[*] Building IP cohort features...")
+    cohort_df = build_ip_cohort_features(raw_df, sess_df)
+    cohort_df.to_parquet(cohort_path, index=False)
+    print(f"[OK] Cohort features saved → {cohort_path}")
+
+    # ── Step 3: Merge all streams and compute fused scores ────────────────────
+    fused_path = "data/processed/fused_scores.parquet"
+    merged = load_and_merge()
+    result = compute_fused_risk(merged)
+    result.to_parquet(fused_path, index=False)
+    print(f"[OK] Fused scores saved → {fused_path}")
+
+    # ── Step 4: Alert deduplication ────────────────────────────────────
+    cases_path = "data/processed/alert_cases.parquet"
+    print("[*] Running alert deduplication (24h window)...")
+    case_df = dedup_alerts(result, window_hours=24)
+    case_df.to_parquet(cases_path, index=False)
+    n_alert_sessions = int((result["fused_risk_score"] >= ALERT_THRESHOLD).sum())
+    print(f"[OK] Alert cases saved → {cases_path}  "
+          f"({n_alert_sessions} alert sessions → {len(case_df)} cases)")
+
+    # ── Step 3: Evaluate on test split ────────────────────────────────────────
+    test = result[result["split"] == "test"].copy()
+    y_true  = test["is_malicious"].astype(int)
+    y_score = test["fused_risk_score"]
+    y_pred  = (y_score >= ALERT_THRESHOLD).astype(int)
+
+    # Guard against degenerate splits
+    has_both_classes = y_true.nunique() == 2
+
+    pr_auc  = average_precision_score(y_true, y_score)  if has_both_classes else float("nan")
+    roc_auc = roc_auc_score(y_true, y_score)             if has_both_classes else float("nan")
+    prec    = precision_score(y_true, y_pred, zero_division=0)
+    rec     = recall_score(y_true, y_pred, zero_division=0)
+    f1      = f1_score(y_true, y_pred, zero_division=0)
+
+    tier_counts = test[test["fused_risk_score"] >= ALERT_THRESHOLD]["fusion_tier"].value_counts().to_dict()
+
+    overall = {
+        "total_test":    len(test),
+        "malicious_test": int(y_true.sum()),
+        "normal_test":   int((~test["is_malicious"]).sum()),
+        "precision":     round(float(prec), 4),
+        "recall":        round(float(rec), 4),
+        "f1":            round(float(f1), 4),
+        "pr_auc":        round(float(pr_auc), 4) if not np.isnan(pr_auc) else None,
+        "roc_auc":       round(float(roc_auc), 4) if not np.isnan(roc_auc) else None,
+        "p_at_1pct":     round(precision_at_top_k(y_score, test["is_malicious"], 1), 4),
+        "p_at_3pct":     round(precision_at_top_k(y_score, test["is_malicious"], 3), 4),
+        "p_at_5pct":     round(precision_at_top_k(y_score, test["is_malicious"], 5), 4),
+        "tier1_flagged": tier_counts.get(1, 0),
+        "tier2_flagged": tier_counts.get(2, 0),
+        "tier3_flagged": tier_counts.get(3, 0),
+        "alert_threshold": ALERT_THRESHOLD,
+    }
+
+    metrics = {
+        "overall":             overall,
+        "per_class_recall":    per_class_recall(result),
+        "hard_rule_coverage":  hard_rule_coverage(result),
+        "insider_drift_fpr":   insider_drift_fpr(result),
+        "classifier_accuracy": classifier_accuracy(result),
+    }
+
+    # ── Step 4: Save outputs ──────────────────────────────────────────────────
+    json_path = "data/processed/fusion_results.json"
+    md_path   = "data/processed/fusion_eval_report.md"
+
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(metrics, f, indent=2)
+    print(f"[OK] Metrics saved → {json_path}")
+
+    md = build_markdown_report(metrics)
+    with open(md_path, "w", encoding="utf-8") as f:
+        f.write(md)
+    print(f"[OK] Report saved → {md_path}")
+
+    # ── Console summary ───────────────────────────────────────────────────────
+    print("\n" + "="*60)
+    print("PHASE 3 FUSION EVALUATION SUMMARY")
+    print("="*60)
+    print(f"  Precision       : {overall['precision']:.4f}")
+    print(f"  Recall          : {overall['recall']:.4f}")
+    print(f"  F1              : {overall['f1']:.4f}")
+    print(f"  PR-AUC          : {overall['pr_auc']}")
+    print(f"  ROC-AUC         : {overall['roc_auc']}")
+    print(f"  P@top-1%        : {overall['p_at_1pct']:.4f}")
+    print(f"  Tier 1 alerts   : {overall['tier1_flagged']}")
+    print(f"  Tier 2 alerts   : {overall['tier2_flagged']}")
+    print(f"  Tier 3 alerts   : {overall['tier3_flagged']}")
+    print()
+    print("  Per-class recall (test):")
+    for atk, v in sorted(metrics["per_class_recall"].items()):
+        print(f"    {atk:35s}: {v['recall']:.4f}  ({v['flagged']}/{v['total']})")
+    print()
+    id_fp = metrics["insider_drift_fpr"]
+    print(f"  insider_drift FPR: {id_fp.get('fpr', 'N/A')}  "
+          f"({id_fp.get('flagged', 0)}/{id_fp.get('total', 0)} flagged, "
+          f"mean score={id_fp.get('score_mean', 'N/A')})")
+    print()
+    ca = metrics["classifier_accuracy"]
+    if ca:
+        print(f"  Rule classifier accuracy: {ca['accuracy']:.4f}  "
+              f"({ca['correct_label']}/{ca['total_malicious_test_sessions']})")
+    print()
+    # Case-level dedup summary (Phase 4)
+    test_cases = case_df[case_df["split"] == "test"]
+    print(f"  Alert dedup (Phase 4, 24h window):")
+    print(f"    {n_alert_sessions} alert sessions → {len(test_cases)} test cases  "
+          f"(suppression rate: "
+          f"{100*case_df['suppressed_count'].sum()/max(n_alert_sessions,1):.1f}%)")
+    print("="*60)
+
+
+if __name__ == "__main__":
+    main()

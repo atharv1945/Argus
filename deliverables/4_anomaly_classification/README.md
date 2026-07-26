@@ -1,0 +1,3 @@
+# Anomaly Classification & Fusion
+
+This deliverable contains the **anomaly classification** and fusion engine, responsible for combining model, graph, and rule-based signals into a single actionable risk score. The `anomaly_first_fusion.py` script enforces deterministic hard rules for critical vectors, then leverages a learned logistic-regression calibration layer to optimally weight the Transformer and Isolation Forest scores. Operating at a threshold of 75, this fusion engine achieves an ultimate system Precision of 0.9213, Recall of 1.000, F1 of ~0.958, and a Normal False Positive rate of just 10/3,163 (0.32%). It maps every high-confidence session to its specific attack type.

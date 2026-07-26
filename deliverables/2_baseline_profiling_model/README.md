@@ -1,0 +1,3 @@
+# Baseline Profiling Model
+
+This deliverable provides the **baseline profiling model** (as outlined in the project brief), responsible for mapping the normal behavior and peer-group boundaries of the organization. It uses feature engineering to extract rolling historical profiles and aggregates role-specific boundaries (e.g., 95th-percentile device connection thresholds for IT service accounts). An unsupervised Isolation Forest model maps the vast multi-dimensional feature space of legitimate traffic, assigning statistical anomaly scores to every session and providing an anchor for cold-start detection scoring.

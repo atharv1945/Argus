@@ -1,0 +1,3 @@
+# Detection Model
+
+This deliverable contains the primary sequence-aware **detection model** powered by a deep PyTorch Transformer (`sequence_model.py`). The model processes chronological session windows to extract subtle, multi-stage attack patterns that evade individual event scoring. Alongside the Transformer is the graph-based entity relationship model (`entity_graph.py`), which constructs behavioral heuristics like lateral movement hops and distinct device fan-outs to boost structural detection signals. Note: The experimental severity-head Transformer has been omitted in favor of this highly performant, generalized base model.

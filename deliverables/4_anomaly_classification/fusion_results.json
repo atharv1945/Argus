@@ -1,0 +1,84 @@
+{
+  "overall": {
+    "total_test": 3280,
+    "malicious_test": 117,
+    "normal_test": 3163,
+    "precision": 0.9213,
+    "recall": 1.0,
+    "f1": 0.959,
+    "pr_auc": 0.9932,
+    "roc_auc": 0.9999,
+    "p_at_1pct": 1.0,
+    "p_at_3pct": 1.0,
+    "p_at_5pct": 0.7134,
+    "tier1_flagged": 99,
+    "tier2_flagged": 25,
+    "tier3_flagged": 3,
+    "alert_threshold": 75
+  },
+  "per_class_recall": {
+    "brute_force": {
+      "total": 3,
+      "flagged": 3,
+      "recall": 1.0
+    },
+    "credential_misuse": {
+      "total": 3,
+      "flagged": 3,
+      "recall": 1.0
+    },
+    "credential_stuffing": {
+      "total": 77,
+      "flagged": 77,
+      "recall": 1.0
+    },
+    "device_spoofing": {
+      "total": 3,
+      "flagged": 3,
+      "recall": 1.0
+    },
+    "impossible_travel": {
+      "total": 4,
+      "flagged": 4,
+      "recall": 1.0
+    },
+    "lateral_movement": {
+      "total": 3,
+      "flagged": 3,
+      "recall": 1.0
+    },
+    "low_and_slow_exfiltration": {
+      "total": 24,
+      "flagged": 24,
+      "recall": 1.0
+    }
+  },
+  "hard_rule_coverage": {
+    "impossible_travel": {
+      "total": 4,
+      "tier1": 4,
+      "flagged": 4,
+      "recall": 1.0,
+      "tier1_rate": 1.0
+    },
+    "device_spoofing": {
+      "total": 3,
+      "tier1": 3,
+      "flagged": 3,
+      "recall": 1.0,
+      "tier1_rate": 1.0
+    }
+  },
+  "insider_drift_fpr": {
+    "total": 10,
+    "flagged": 3,
+    "fpr": 0.3,
+    "score_mean": 33.0,
+    "score_max": 93
+  },
+  "classifier_accuracy": {
+    "total_malicious_test_sessions": 117,
+    "correct_label": 109,
+    "accuracy": 0.9316
+  }
+}

@@ -1,0 +1,121 @@
+{
+  "overall": {
+    "precision": 0.7412587412587412,
+    "recall": 0.905982905982906,
+    "f1": 0.8153846153846154,
+    "pr_auc": 0.9487356684361729,
+    "roc_auc": 0.9954197978225799,
+    "threshold": 0.5,
+    "n_test_sessions": 3280,
+    "n_malicious_test": 117
+  },
+  "per_attack_type": {
+    "brute_force": {
+      "recall": 1.0,
+      "pr_auc": 1.0,
+      "n_sessions_this_type": 3,
+      "n_flagged_sessions": 3,
+      "n_campaigns_in_test": 3,
+      "is_benign_edge_case": false,
+      "note": "recall & PR-AUC vs normal traffic"
+    },
+    "credential_misuse": {
+      "recall": 1.0,
+      "pr_auc": 1.0,
+      "n_sessions_this_type": 3,
+      "n_flagged_sessions": 3,
+      "n_campaigns_in_test": 3,
+      "is_benign_edge_case": false,
+      "note": "recall & PR-AUC vs normal traffic"
+    },
+    "credential_stuffing": {
+      "recall": 0.9221,
+      "pr_auc": 0.9433,
+      "n_sessions_this_type": 77,
+      "n_flagged_sessions": 71,
+      "n_campaigns_in_test": 3,
+      "is_benign_edge_case": false,
+      "note": "recall & PR-AUC vs normal traffic"
+    },
+    "device_spoofing": {
+      "recall": 0.3333,
+      "pr_auc": 0.0454,
+      "n_sessions_this_type": 3,
+      "n_flagged_sessions": 1,
+      "n_campaigns_in_test": 3,
+      "is_benign_edge_case": false,
+      "note": "recall & PR-AUC vs normal traffic"
+    },
+    "impossible_travel": {
+      "recall": 0.5,
+      "pr_auc": 0.5247,
+      "n_sessions_this_type": 4,
+      "n_flagged_sessions": 2,
+      "n_campaigns_in_test": 4,
+      "is_benign_edge_case": false,
+      "note": "recall & PR-AUC vs normal traffic"
+    },
+    "insider_drift": {
+      "recall": 0.3,
+      "pr_auc": 0.0,
+      "n_sessions_this_type": 10,
+      "n_flagged_sessions": 3,
+      "n_campaigns_in_test": 2,
+      "is_benign_edge_case": true,
+      "note": "BENIGN edge case (is_malicious=False). Model should NOT flag these."
+    },
+    "lateral_movement": {
+      "recall": 0.6667,
+      "pr_auc": 0.6821,
+      "n_sessions_this_type": 3,
+      "n_flagged_sessions": 2,
+      "n_campaigns_in_test": 3,
+      "is_benign_edge_case": false,
+      "note": "recall & PR-AUC vs normal traffic"
+    },
+    "low_and_slow_exfiltration": {
+      "recall": 1.0,
+      "pr_auc": 1.0,
+      "n_sessions_this_type": 24,
+      "n_flagged_sessions": 24,
+      "n_campaigns_in_test": 3,
+      "is_benign_edge_case": false,
+      "note": "recall & PR-AUC vs normal traffic"
+    }
+  },
+  "precision_at_top_k": {
+    "top_0.5pct": {
+      "k": 16,
+      "true_positives": 16,
+      "false_positives": 0,
+      "precision": 1.0,
+      "insider_drift_flagged": 0,
+      "note": "Top 0.5% of test sessions by anomaly score (16 sessions)"
+    },
+    "top_1.0pct": {
+      "k": 32,
+      "true_positives": 32,
+      "false_positives": 0,
+      "precision": 1.0,
+      "insider_drift_flagged": 0,
+      "note": "Top 1.0% of test sessions by anomaly score (32 sessions)"
+    },
+    "top_2.0pct": {
+      "k": 65,
+      "true_positives": 65,
+      "false_positives": 0,
+      "precision": 1.0,
+      "insider_drift_flagged": 0,
+      "note": "Top 2.0% of test sessions by anomaly score (65 sessions)"
+    }
+  },
+  "insider_drift_analysis": {
+    "total_drift_test_sessions": 10,
+    "drift_flagged_as_anomaly": 3,
+    "drift_false_positive_rate": 0.3,
+    "drift_mean_score": 0.2560799534461694,
+    "normal_mean_score": 0.009902289318229344,
+    "malicious_mean_score": 0.9086739932222722,
+    "note": "insider_drift sessions are BENIGN (is_malicious=False). Flagging them counts against precision."
+  }
+}

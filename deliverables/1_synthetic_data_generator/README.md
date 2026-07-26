@@ -1,0 +1,3 @@
+# Synthetic Data Generator
+
+This deliverable contains the synthetic access-log generator (`generate_dataset.py`) for ARGUS. It produces realistic enterprise telemetry containing a normal baseline, an `insider_drift` edge case (FP bait), and 7 distinct attack types (including impossible travel, credential stuffing, and low & slow exfiltration). All behavioral assumptions, fan-out parameters, and temporal constraints are driven by the provided YAML configuration, ensuring predictable and labeled dataset boundaries. For the full 21-field canonical data schema and attack taxonomy, please see `README.md` (copied from the `data/` directory).
