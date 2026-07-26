@@ -1,18 +1,18 @@
 {
   "overall": {
-    "precision": 0.39849624060150374,
+    "precision": 0.4092664092664093,
     "recall": 1.0,
-    "f1": 0.5698924731182796,
-    "pr_auc": 0.9772195672405795,
-    "roc_auc": 0.9992133398491043,
-    "threshold": -0.04259540680026504,
+    "f1": 0.5808219178082191,
+    "pr_auc": 0.9757171147873918,
+    "roc_auc": 0.9991626837030239,
+    "threshold": -0.042997341856491796,
     "n_test_sessions": 3272,
     "n_malicious_test": 106
   },
   "per_attack_type": {
     "brute_force": {
       "recall": 1.0,
-      "pr_auc": 0.1497,
+      "pr_auc": 0.1518,
       "n_sessions_this_type": 3,
       "n_flagged_sessions": 3,
       "n_campaigns_in_test": 3,
@@ -30,7 +30,7 @@
     },
     "credential_stuffing": {
       "recall": 1.0,
-      "pr_auc": 0.9858,
+      "pr_auc": 0.9847,
       "n_sessions_this_type": 66,
       "n_flagged_sessions": 66,
       "n_campaigns_in_test": 3,
@@ -39,7 +39,7 @@
     },
     "device_spoofing": {
       "recall": 1.0,
-      "pr_auc": 0.8333,
+      "pr_auc": 0.8095,
       "n_sessions_this_type": 3,
       "n_flagged_sessions": 3,
       "n_campaigns_in_test": 3,
@@ -75,7 +75,7 @@
     },
     "low_and_slow_exfiltration": {
       "recall": 1.0,
-      "pr_auc": 0.9214,
+      "pr_auc": 0.909,
       "n_sessions_this_type": 24,
       "n_flagged_sessions": 24,
       "n_campaigns_in_test": 3,
@@ -113,9 +113,9 @@
     "total_drift_test_sessions": 10,
     "drift_flagged_as_anomaly": 10,
     "drift_false_positive_rate": 1.0,
-    "drift_mean_score": 0.02198210015420763,
-    "normal_mean_score": -0.10146713109477407,
-    "malicious_mean_score": 0.07463594153180088,
+    "drift_mean_score": 0.023763708403102345,
+    "normal_mean_score": -0.10211738215755312,
+    "malicious_mean_score": 0.07493030683842175,
     "note": "insider_drift sessions are BENIGN (is_malicious=False). Flagging them counts against precision."
   }
 }
