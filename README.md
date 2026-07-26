@@ -1,4 +1,5 @@
 # ARGUS
+
 **AI-Powered Behavioral Anomaly Detection for Cybersecurity**
 
 ARGUS is a hybrid, multi-stage cybersecurity detection engine designed to identify anomalous entity behavior, insider threats, and sophisticated exfiltration campaigns. By fusing deterministic hard rules, graph-based structural heuristics, and deep sequence modeling, ARGUS provides a robust defense against attacks that evade traditional signature-based detection. It scales to massive log telemetry while maintaining operational precision and surfacing actionable, interpretable alerts to security analysts.
@@ -8,6 +9,7 @@ ARGUS is a hybrid, multi-stage cybersecurity detection engine designed to identi
 ## Problem Statement
 
 Modern enterprise networks generate immense volumes of raw telemetry (authentication logs, network flows, resource access). Finding a targeted, low-and-slow attack or a compromised insider in this data is a "needle in a haystack" problem characterized by:
+
 - **Sequential/Behavioral Complexity:** Attacks unfold over time, not in single isolated events.
 - **Extreme Class Imbalance:** Millions of benign events for every single malicious action.
 - **Concept Drift:** Normal organizational behavior shifts constantly, causing models to decay.
@@ -19,6 +21,7 @@ Modern enterprise networks generate immense volumes of raw telemetry (authentica
 ## How It Addresses the Problem
 
 ARGUS tackles these fundamental challenges through a targeted, multi-tiered architecture:
+
 - **Sequential/Behavioral Data:** A deep **Transformer sequence model** analyzes chronological session windows, natively understanding the temporal progression of user behavior and detecting subtle deviations over time.
 - **Extreme Class Imbalance:** Instead of relying entirely on ML for rare attacks, ARGUS uses an **Anomaly-First Fusion** engine. Deterministic hard rules and structural graph-boosts guarantee detection of known vectors (like impossible travel), while unsupervised Isolation Forests map the vast baseline of "normal."
 - **Concept Drift:** A dedicated **Drift Monitor** continuously tracks Kolmogorov-Smirnov (KS) statistics and Population Stability Index (PSI) against a strictly filtered (malicious/cold-start free) baseline, proactively alerting before model decay impacts production.
@@ -79,19 +82,19 @@ graph TD
 
 Metrics represent the final, fully-calibrated system (Threshold = 75, Test Split = 3,280 sessions):
 
-*   **Precision:** 0.9213
-*   **Recall:** 1.000 (117/117 benchmark attacks detected)
-*   **F1 Score:** ~0.959
-*   **Normal FP Rate:** 0.32% (10 false positives / 3,163 normal sessions)
+- **Precision:** 0.9213
+- **Recall:** 1.000 (117/117 benchmark attacks detected)
+- **F1 Score:** ~0.959
+- **Normal FP Rate:** 0.32% (10 false positives / 3,163 normal sessions)
 
 **Per-Class Recall Breakdown:**
-*   `brute_force`: 3/3 (1.000)
-*   `credential_misuse`: 3/3 (1.000)
-*   `credential_stuffing`: 77/77 (1.000)
-*   `device_spoofing`: 3/3 (1.000)
-*   `impossible_travel`: 4/4 (1.000)
-*   `lateral_movement`: 3/3 (1.000)
-*   `low_and_slow_exfiltration`: 24/24 (1.000) — *(Note: 1.000 recall achieved after Logistic Regression fusion reweighting, previously limited to 0.542 under arithmetic fusion)*
+- `brute_force`: 3/3 (1.000)
+- `credential_misuse`: 3/3 (1.000)
+- `credential_stuffing`: 77/77 (1.000)
+- `device_spoofing`: 3/3 (1.000)
+- `impossible_travel`: 4/4 (1.000)
+- `lateral_movement`: 3/3 (1.000)
+- `low_and_slow_exfiltration`: 24/24 (1.000) — *(Note: 1.000 recall achieved after Logistic Regression fusion reweighting, previously limited to 0.542 under arithmetic fusion)*
 
 **Documented Limitation:**
 While `low_and_slow_exfiltration` recall is currently 1.000 on the test split, diagnostic tracing revealed this attack heavily challenges per-session scoring paradigms. Because these attacks generate only 1-2 minor events per session over a 7-day window, early sessions in the campaign yield extremely low confidence scores. Detection success relies heavily on the Transformer recognizing the later position-in-sequence signatures. Complete, robust detection of this class requires multi-session temporal window correlation, which remains the primary boundary of the current architecture.
@@ -123,13 +126,13 @@ Argus/
 
 ## Tech Stack
 
-*   **Python 3.10+** (Core language)
-*   **Pandas / NumPy / PyArrow:** High-performance tabular data manipulation and parquet storage.
-*   **PyTorch (Local):** Deep learning framework powering the Transformer sequence model. *(Note: PyTorch is excluded from the deployed `requirements.txt` to maintain a lightweight Streamlit Cloud footprint, as the deployed dashboard visualizes pre-computed scores).*
-*   **Scikit-Learn (Local):** Core library for the Isolation Forest and Logistic Regression calibration.
-*   **NetworkX:** For computing graphical heuristics, subgraphs, and lateral movement hops.
-*   **Streamlit & Altair:** For rapid, interactive, and data-rich SOC dashboard visualization.
-*   **SciPy:** For Kolmogorov-Smirnov tests utilized in the concept drift monitor.
+- **Python 3.10+** (Core language)
+- **Pandas / NumPy / PyArrow:** High-performance tabular data manipulation and parquet storage.
+- **PyTorch (Local):** Deep learning framework powering the Transformer sequence model. *(Note: PyTorch is excluded from the deployed `requirements.txt` to maintain a lightweight Streamlit Cloud footprint, as the deployed dashboard visualizes pre-computed scores).*
+- **Scikit-Learn (Local):** Core library for the Isolation Forest and Logistic Regression calibration.
+- **NetworkX:** For computing graphical heuristics, subgraphs, and lateral movement hops.
+- **Streamlit & Altair:** For rapid, interactive, and data-rich SOC dashboard visualization.
+- **SciPy:** For Kolmogorov-Smirnov tests utilized in the concept drift monitor.
 
 ---
 
@@ -157,6 +160,7 @@ pip install torch scikit-learn faker  # Required for local model training and ge
 ```
 
 **Step-by-Step Execution:**
+
 1. **Generate Dataset:** `python src/ingest/generate_dataset.py`
 2. **Build Features:** `python src/ingest/build_features.py`
 3. **Train Isolation Forest:** `python src/models/isolation_forest.py`
@@ -173,7 +177,7 @@ pip install torch scikit-learn faker  # Required for local model training and ge
 
 The development of ARGUS prioritized uncovering and resolving deep ML failure modes rather than accepting superficial accuracy:
 
-*   **Model Memorization via Dataset Artifacts:** Initially, an XGBoost model achieved 100% precision. Diagnostic auditing proved it was circumventing actual behavior analysis by memorizing an underlying PRNG state linked to `user_agent` strings. XGBoost was discarded in favor of the Transformer, and the dataset generator was rewritten with isolated PRNG instances per campaign.
-*   **Cross-Contamination of Signals:** Early iterations of the `geo_velocity` check suffered from "probe contamination," where a malicious session's foreign IP established a new baseline for the victim, causing their *next* legitimate login to flag as impossible travel. This was fixed by enforcing an authenticated-only (`fp_mismatch == 0`) forward-fill constraint on the geo baseline.
-*   **Peer-Group Normalization (Cold-Start FPs):** Strict hard-rules for `new_device_edge_count` falsely flagged IT Service Accounts doing routine mass updates. ARGUS was updated to dynamically compute 95th-percentile peer-group thresholds (mapping Entity Type and Department), preserving high detection rates while eliminating false positives from structurally high-fan-out benign entities.
-*   **Drift Monitor Hallucinations:** The drift monitor initially flagged massive (8.7x) concept drift between the train and test normal sessions. Investigation revealed that the baseline was inadvertently contaminated with cold-start sessions (which have naturally high anomaly scores). By strictly filtering the train baseline to `is_malicious == False AND entity_session_idx > 2`, the baseline stabilized and the false drift alarm was cleared.
+- **Model Memorization via Dataset Artifacts:** Initially, an XGBoost model achieved 100% precision. Diagnostic auditing proved it was circumventing actual behavior analysis by memorizing an underlying PRNG state linked to `user_agent` strings. XGBoost was discarded in favor of the Transformer, and the dataset generator was rewritten with isolated PRNG instances per campaign.
+- **Cross-Contamination of Signals:** Early iterations of the `geo_velocity` check suffered from "probe contamination," where a malicious session's foreign IP established a new baseline for the victim, causing their *next* legitimate login to flag as impossible travel. This was fixed by enforcing an authenticated-only (`fp_mismatch == 0`) forward-fill constraint on the geo baseline.
+- **Peer-Group Normalization (Cold-Start FPs):** Strict hard-rules for `new_device_edge_count` falsely flagged IT Service Accounts doing routine mass updates. ARGUS was updated to dynamically compute 95th-percentile peer-group thresholds (mapping Entity Type and Department), preserving high detection rates while eliminating false positives from structurally high-fan-out benign entities.
+- **Drift Monitor Hallucinations:** The drift monitor initially flagged massive (8.7x) concept drift between the train and test normal sessions. Investigation revealed that the baseline was inadvertently contaminated with cold-start sessions (which have naturally high anomaly scores). By strictly filtering the train baseline to `is_malicious == False AND entity_session_idx > 2`, the baseline stabilized and the false drift alarm was cleared.
