@@ -341,7 +341,7 @@ def get_drift_level(drift_baseline: dict, fused: pd.DataFrame) -> tuple[str, str
     if len(test) == 0:
         return "UNKNOWN", MUTED_COLOR, "Insufficient test data"
     test_normal  = test[~test["is_malicious"]] if "is_malicious" in test.columns else test
-    test_alert_rate = (test_normal["fused_risk_score"] >= 55).mean()
+    test_alert_rate = (test_normal["fused_risk_score"] >= 75).mean()
     ratio        = test_alert_rate / max(train_rate, 1e-6)
     desc = f"Test alert rate {test_alert_rate:.2%} vs train {train_rate:.2%} (ratio {ratio:.2f}×) — {n_baseline:,} sessions ({baseline_filter})"
     if ratio < 1.5:
