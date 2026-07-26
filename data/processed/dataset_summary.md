@@ -2,10 +2,10 @@
 
 ## Dataset Overview
 
-- **Total Events**: `140,015`
-- **Date Range**: `2026-05-31 23:22:00 UTC` to `2026-07-01 03:25:32 UTC` (`21` days)
+- **Total Events**: `140,033`
+- **Date Range**: `2026-05-31 23:22:00 UTC` to `2026-06-27 03:01:15 UTC` (`21` days)
 - **Total Monitored Entities**: `400` (Users, Service Accounts, Edge Devices)
-- **Total Tracked Sessions**: `9,570`
+- **Total Tracked Sessions**: `9,571`
 - **Target Attack Ratio (Entities)**: `7.0%`
 
 ---
@@ -14,9 +14,9 @@
 
 | Class | Event Count | Percentage |
 | :--- | :--- | :--- |
-| **Normal Traffic (`is_malicious=False`)** | `139,418` | `99.57%` |
-| **Malicious Traffic (`is_malicious=True`)** | `597` | `0.43%` |
-| **Total** | `140,015` | `100.00%` |
+| **Normal Traffic (`is_malicious=False`)** | `139,418` | `99.56%` |
+| **Malicious Traffic (`is_malicious=True`)** | `615` | `0.44%` |
+| **Total** | `140,033` | `100.00%` |
 
 ---
 
@@ -24,13 +24,13 @@
 
 | Attack / Pattern Category (`attack_type`) | Campaign Count (`attack_instance_id`) | Total Events | Ground Truth Label (`is_malicious`) | Description |
 | :--- | :---: | :---: | :---: | :--- |
-| `credential_misuse` | `7` | `48` | `True` | Off-hours sensitive cross-department resource access under valid user credentials |
-| `brute_force` | `7` | `160` | `True` | Burst of failed logons followed by 1 successful logon & unauthorized access |
+| `credential_misuse` | `7` | `49` | `True` | Off-hours sensitive cross-department resource access under valid user credentials |
+| `brute_force` | `7` | `179` | `True` | Burst of failed logons followed by 1 successful logon & unauthorized access |
 | `lateral_movement` | `7` | `56` | `True` | Rapid fan-out access across multiple foreign host devices & servers |
 | `impossible_travel` | `14` | `14` | `True` | Sequential logons under same entity ID from physically distant countries |
 | `device_spoofing` | `7` | `7` | `True` | Session initiated from an unrecognized, non-fingerprinted rogue device ID |
-| `credential_stuffing` | `7` | `177` | `True` | MANY entity IDs attempting auth from FEW shared attacker IPs with high failure rate |
-| `low_and_slow_exfiltration` | `7` | `135` | `True` | Gradual, small off-hours resource access building up incrementally over weeks |
+| `credential_stuffing` | `7` | `178` | `True` | MANY entity IDs attempting auth from FEW shared attacker IPs with high failure rate |
+| `low_and_slow_exfiltration` | `7` | `132` | `True` | Gradual, small off-hours resource access building up incrementally over weeks |
 | `insider_drift` | `6` | `65` | **`False` (Benign)** | AMBIGUOUS EDGE CASE: Legitimate entity expanding privilege footprint (Benign FP bait) |
 
 ---

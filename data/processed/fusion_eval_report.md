@@ -7,24 +7,24 @@
 | Metric | Value |
 |--------|-------|
 | Threshold | 50 / 100 |
-| Total test sessions | 3,272 |
-| Malicious sessions | 106 |
-| Normal sessions | 3,166 |
-| Precision | 0.6584 |
+| Total test sessions | 3,280 |
+| Malicious sessions | 117 |
+| Normal sessions | 3,163 |
+| Precision | 0.7452 |
 | Recall | 1.0000 |
-| F1 | 0.7940 |
-| PR-AUC | 0.9502 |
-| ROC-AUC | 0.9988 |
+| F1 | 0.8540 |
+| PR-AUC | 0.9576 |
+| ROC-AUC | 0.9984 |
 | Precision@top-1% | 1.0000 |
-| Precision@top-3% | 0.9082 |
-| Precision@top-5% | 0.6503 |
+| Precision@top-3% | 0.9388 |
+| Precision@top-5% | 0.7134 |
 
 ## Tier Distribution (Test Flagged Sessions)
 
 | Tier | Count | Description |
 |------|-------|-------------|
-| 1 (Hard rules) | 88 | fp_mismatch / geo_velocity → 90–100 |
-| 2 (Graph-boosted) | 73 | lateral/relational evidence → 55–89 |
+| 1 (Hard rules) | 99 | fp_mismatch / geo_velocity → 90–100 |
+| 2 (Graph-boosted) | 58 | lateral/relational evidence → 55–89 |
 | 3 (Model-driven) | 0 | IF + Transformer blend → 0–54 |
 
 ## Per-Attack-Type Recall
@@ -33,7 +33,7 @@
 |-------------|--------------|---------|--------|
 | brute_force | 3 | 3 | 1.0000 |
 | credential_misuse | 3 | 3 | 1.0000 |
-| credential_stuffing | 66 | 66 | 1.0000 |
+| credential_stuffing | 77 | 77 | 1.0000 |
 | device_spoofing | 3 | 3 | 1.0000 |
 | impossible_travel | 4 | 4 | 1.0000 |
 | lateral_movement | 3 | 3 | 1.0000 |
@@ -51,18 +51,18 @@
 | Metric | Value |
 |--------|-------|
 | Total insider_drift test sessions | 10 |
-| Flagged (FP) | 4 |
-| FPR | 0.4 |
-| Mean fused score | 36.7 |
-| Max fused score | 80 |
+| Flagged (FP) | 3 |
+| FPR | 0.3 |
+| Mean fused score | 25.9 |
+| Max fused score | 60 |
 
 ## Rule Classifier Accuracy
 
 | Metric | Value |
 |--------|-------|
-| Total malicious test sessions | 106 |
-| Correctly labeled | 90 |
-| Accuracy | 0.8491 |
+| Total malicious test sessions | 117 |
+| Correctly labeled | 109 |
+| Accuracy | 0.9316 |
 
 ## Key Observations
 
