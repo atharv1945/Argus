@@ -46,7 +46,7 @@ from scipy import stats
 # Constants
 # ─────────────────────────────────────────────────────────────────────────────
 
-ALERT_THRESHOLD      = 50      # fused_risk_score >= this → flagged
+ALERT_THRESHOLD      = 75      # fused_risk_score >= this → flagged
 PSI_N_BINS           = 10      # number of PSI histogram bins
 PSI_THRESHOLD_MOD    = 0.10    # PSI >= this → MODERATE
 PSI_THRESHOLD_SIG    = 0.25    # PSI >= this → SIGNIFICANT
