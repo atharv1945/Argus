@@ -43,3 +43,5 @@ nul_check.txt
 # OS specific
 .DS_Store
 Thumbs.db
+data/processed/graph_features.parquet
+data/processed/cohort_features.parquet
