@@ -59,7 +59,7 @@ def run_sanity_check(fused_df: pd.DataFrame, baseline: dict) -> bool:
     Returns True if the check passes (PSI < threshold_moderate, KS not detected).
     """
     _separator("CHECK A — Sanity (test split vs train baseline)")
-    test_df = fused_df[(fused_df["split"] == "test") & (~fused_df["is_malicious"]) & (fused_df.get("entity_session_idx", 3) > 2)].copy()
+    test_df = fused_df[(fused_df["split"] == "test") & (~fused_df["is_malicious"])].copy()
     print(f"  Test sessions (normal-only) : {len(test_df):,}")
     print()
 
