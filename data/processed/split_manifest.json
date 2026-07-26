@@ -1,107 +1,163 @@
 {
   "split_strategy": {
-    "malicious": "Campaign-level hold-out \u2014 3 latest-dated campaigns per attack_type go to test. No event-level leakage.",
+    "malicious": "Campaign-level hold-out \u2014 6 latest-dated campaigns per attack_type go to test. No event-level leakage.",
     "normal": "Chronological split \u2014 events before normal_cutoff_date go to train.",
     "insider_drift": "Benign edge case (is_malicious=False). Earliest 4 campaigns \u2192 train, latest 2 \u2192 test.",
     "seed": "auto (derived from generated dataset campaign dates)"
   },
   "train_campaigns": {
     "brute_force": [
-      "ATK_BF_20260603_001",
-      "ATK_BF_20260604_005",
-      "ATK_BF_20260605_003",
-      "ATK_BF_20260606_006"
+      "ATK_BF_20260604_009",
+      "ATK_BF_20260605_012",
+      "ATK_BF_20260606_014",
+      "ATK_BF_20260607_001",
+      "ATK_BF_20260607_006",
+      "ATK_BF_20260607_008",
+      "ATK_BF_20260610_011",
+      "ATK_BF_20260614_004"
     ],
     "credential_misuse": [
-      "ATK_CM_20260605_003",
-      "ATK_CM_20260606_005",
-      "ATK_CM_20260607_004",
-      "ATK_CM_20260615_002"
+      "ATK_CM_20260607_011",
+      "ATK_CM_20260607_007",
+      "ATK_CM_20260608_003",
+      "ATK_CM_20260612_010",
+      "ATK_CM_20260612_005",
+      "ATK_CM_20260612_014",
+      "ATK_CM_20260613_001",
+      "ATK_CM_20260616_012"
     ],
     "credential_stuffing": [
-      "ATK_CS_20260605_007",
-      "ATK_CS_20260605_001",
-      "ATK_CS_20260608_003",
-      "ATK_CS_20260613_004"
+      "ATK_CS_20260603_005",
+      "ATK_CS_20260604_013",
+      "ATK_CS_20260606_001",
+      "ATK_CS_20260607_014",
+      "ATK_CS_20260609_012",
+      "ATK_CS_20260610_008",
+      "ATK_CS_20260610_003",
+      "ATK_CS_20260612_011"
     ],
     "device_spoofing": [
-      "ATK_DS_20260603_007",
-      "ATK_DS_20260607_002",
+      "ATK_DS_20260603_001",
+      "ATK_DS_20260606_009",
+      "ATK_DS_20260608_003",
       "ATK_DS_20260609_005",
-      "ATK_DS_20260610_001"
+      "ATK_DS_20260610_006",
+      "ATK_DS_20260610_007",
+      "ATK_DS_20260613_004",
+      "ATK_DS_20260613_011"
     ],
     "impossible_travel": [
-      "ATK_ITSC_20260604_003",
-      "ATK_ITSC_20260605_002",
-      "ATK_ITSC_20260611_004",
+      "ATK_ITSC_20260603_002",
+      "ATK_ITSC_20260605_010",
+      "ATK_ITSC_20260610_005",
+      "ATK_ITSC_20260612_014",
+      "ATK_ITSC_20260612_003",
+      "ATK_ITSC_20260612_013",
       "ATK_ITSC_20260613_001",
-      "ATK_ITSC_20260613_005",
-      "ATK_IT_20260604_005",
-      "ATK_IT_20260605_002",
-      "ATK_IT_20260609_001",
-      "ATK_IT_20260611_006",
-      "ATK_IT_20260612_007"
+      "ATK_ITSC_20260613_012",
+      "ATK_ITSC_20260615_009",
+      "ATK_ITSC_20260616_006",
+      "ATK_IT_20260608_005",
+      "ATK_IT_20260608_007",
+      "ATK_IT_20260609_012",
+      "ATK_IT_20260610_008",
+      "ATK_IT_20260610_010",
+      "ATK_IT_20260611_014",
+      "ATK_IT_20260616_013",
+      "ATK_IT_20260616_002",
+      "ATK_IT_20260616_003",
+      "ATK_IT_20260617_011"
     ],
     "lateral_movement": [
-      "ATK_LM_20260604_006",
-      "ATK_LM_20260604_004",
-      "ATK_LM_20260606_002",
-      "ATK_LM_20260608_003"
+      "ATK_LM_20260604_003",
+      "ATK_LM_20260606_006",
+      "ATK_LM_20260610_012",
+      "ATK_LM_20260610_005",
+      "ATK_LM_20260611_008",
+      "ATK_LM_20260612_007",
+      "ATK_LM_20260612_013",
+      "ATK_LM_20260613_010"
     ],
     "low_and_slow_exfiltration": [
-      "ATK_LS_20260604_001",
-      "ATK_LS_20260605_004",
-      "ATK_LS_20260607_005",
-      "ATK_LS_20260608_003"
+      "ATK_LS_20260603_011",
+      "ATK_LS_20260603_010",
+      "ATK_LS_20260607_006",
+      "ATK_LS_20260609_001",
+      "ATK_LS_20260610_009",
+      "ATK_LS_20260610_012",
+      "ATK_LS_20260616_007",
+      "ATK_LS_20260616_005"
     ]
   },
   "test_campaigns": {
     "brute_force": [
-      "ATK_BF_20260615_007",
-      "ATK_BF_20260618_002",
-      "ATK_BF_20260618_004"
+      "ATK_BF_20260614_002",
+      "ATK_BF_20260615_003",
+      "ATK_BF_20260617_005",
+      "ATK_BF_20260619_013",
+      "ATK_BF_20260619_010",
+      "ATK_BF_20260620_007"
     ],
     "credential_misuse": [
-      "ATK_CM_20260617_001",
-      "ATK_CM_20260618_007",
+      "ATK_CM_20260616_008",
+      "ATK_CM_20260617_013",
+      "ATK_CM_20260618_009",
+      "ATK_CM_20260619_004",
+      "ATK_CM_20260619_002",
       "ATK_CM_20260620_006"
     ],
     "credential_stuffing": [
-      "ATK_CS_20260615_002",
-      "ATK_CS_20260618_005",
-      "ATK_CS_20260619_006"
+      "ATK_CS_20260613_010",
+      "ATK_CS_20260615_006",
+      "ATK_CS_20260617_007",
+      "ATK_CS_20260618_002",
+      "ATK_CS_20260619_009",
+      "ATK_CS_20260620_004"
     ],
     "device_spoofing": [
-      "ATK_DS_20260614_003",
-      "ATK_DS_20260618_004",
-      "ATK_DS_20260620_006"
+      "ATK_DS_20260614_012",
+      "ATK_DS_20260616_002",
+      "ATK_DS_20260618_014",
+      "ATK_DS_20260618_010",
+      "ATK_DS_20260620_013",
+      "ATK_DS_20260620_008"
     ],
     "impossible_travel": [
-      "ATK_ITSC_20260613_006",
-      "ATK_ITSC_20260615_007",
-      "ATK_IT_20260613_004",
-      "ATK_IT_20260619_003"
+      "ATK_ITSC_20260617_011",
+      "ATK_ITSC_20260619_007",
+      "ATK_ITSC_20260620_008",
+      "ATK_ITSC_20260620_004",
+      "ATK_IT_20260618_001",
+      "ATK_IT_20260618_009",
+      "ATK_IT_20260619_004",
+      "ATK_IT_20260620_006"
     ],
     "lateral_movement": [
-      "ATK_LM_20260611_007",
-      "ATK_LM_20260613_001",
-      "ATK_LM_20260615_005"
+      "ATK_LM_20260613_002",
+      "ATK_LM_20260613_014",
+      "ATK_LM_20260615_001",
+      "ATK_LM_20260616_011",
+      "ATK_LM_20260617_004",
+      "ATK_LM_20260619_009"
     ],
     "low_and_slow_exfiltration": [
-      "ATK_LS_20260613_007",
-      "ATK_LS_20260615_002",
-      "ATK_LS_20260615_006"
+      "ATK_LS_20260617_013",
+      "ATK_LS_20260618_004",
+      "ATK_LS_20260619_014",
+      "ATK_LS_20260619_008",
+      "ATK_LS_20260619_003",
+      "ATK_LS_20260620_002"
     ]
   },
   "insider_drift_train": [
-    "ATK_ID_20260605_002",
-    "ATK_ID_20260608_001",
-    "ATK_ID_20260609_003",
-    "ATK_ID_20260610_006"
+    "ATK_ID_20260606_002",
+    "ATK_ID_20260606_006"
   ],
   "insider_drift_test": [
+    "ATK_ID_20260607_003",
+    "ATK_ID_20260608_001",
     "ATK_ID_20260610_004",
-    "ATK_ID_20260610_005"
+    "ATK_ID_20260611_005"
   ],
-  "normal_cutoff_date": "2026-06-13T11:25:00"
+  "normal_cutoff_date": "2026-06-13T08:53:00"
 }

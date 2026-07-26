@@ -1191,7 +1191,7 @@ class AttackInjector:
 # Main Orchestration & Export
 # -----------------------------------------------------------------------------
 
-def auto_split_manifest(df: pd.DataFrame, output_dir: str, test_campaigns_per_type: int = 3,
+def auto_split_manifest(df: pd.DataFrame, output_dir: str, test_campaigns_per_type: int = 6,
                          normal_cutoff_date: str = None) -> dict:
     """
     Auto-compute the train/test split manifest from the generated dataset.
@@ -1246,7 +1246,7 @@ def auto_split_manifest(df: pd.DataFrame, output_dir: str, test_campaigns_per_ty
             train_ids = []
             for pfx, pfx_grp in grp.groupby("prefix"):
                 pfx_sorted = pfx_grp.sort_values("first_event")["attack_instance_id"].tolist()
-                n_test_pfx = min(2, len(pfx_sorted))
+                n_test_pfx = min(4, len(pfx_sorted))
                 test_ids.extend(pfx_sorted[-n_test_pfx:])
                 train_ids.extend(pfx_sorted[:-n_test_pfx] if n_test_pfx < len(pfx_sorted) else [])
             manifest["train_campaigns"][attack_type] = train_ids
@@ -1270,7 +1270,7 @@ def auto_split_manifest(df: pd.DataFrame, output_dir: str, test_campaigns_per_ty
             .sort_values("timestamp")
         )
         all_drift = drift_dates["attack_instance_id"].tolist()
-        n_drift_test = min(2, len(all_drift))
+        n_drift_test = min(4, len(all_drift))
         manifest["insider_drift_train"] = all_drift[:-n_drift_test] if n_drift_test < len(all_drift) else all_drift
         manifest["insider_drift_test"] = all_drift[-n_drift_test:]
 
