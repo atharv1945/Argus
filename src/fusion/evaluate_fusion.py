@@ -44,7 +44,7 @@ from src.fusion.alert_dedup import dedup_alerts
 # Evaluation helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
-ALERT_THRESHOLD = 50   # fused_risk_score >= this → flagged
+ALERT_THRESHOLD = 90   # fused_risk_score >= this → flagged
 
 def precision_at_top_k(scores: pd.Series, labels: pd.Series, k_pct: float) -> float:
     n_top = max(1, int(len(scores) * k_pct / 100))

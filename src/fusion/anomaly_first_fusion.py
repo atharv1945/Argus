@@ -326,16 +326,21 @@ def compute_fused_risk(merged_df: pd.DataFrame) -> pd.DataFrame:
             score = TIER1_MIN + min(hrf * 3, 10)
             tier  = 1
         else:
-            boosted = float(row["base_score"]) + float(row["graph_boost"])
-            if boosted >= 0.55:
-                # Tier 2: graph-boosted
-                score = int(min(boosted, 1.0) * TIER2_MAX)
-                score = max(score, 55)       # floor at tier boundary
-                tier  = 2
+            import math
+            # Calibrated Logistic Regression Fusion
+            log_odds = (5.9005 * float(row["transformer_score"]) 
+                      - 10.3460 * float(row["if_norm"]) 
+                      + 2.3163 * float(row["graph_boost"]) 
+                      + 2.2848)
+            # Clip log_odds to prevent math range errors
+            log_odds = max(min(log_odds, 500), -500)
+            prob = 1.0 / (1.0 + math.exp(-log_odds))
+            score = int(prob * 100.0)
+            
+            if score >= 90:
+                tier = 2
             else:
-                # Tier 3: model-driven
-                score = int(float(row["base_score"]) * TIER3_MAX)
-                tier  = 3
+                tier = 3
 
         scores.append(score)
         tiers.append(tier)

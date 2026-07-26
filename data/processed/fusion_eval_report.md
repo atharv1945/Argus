@@ -6,17 +6,17 @@
 
 | Metric | Value |
 |--------|-------|
-| Threshold | 50 / 100 |
+| Threshold | 90 / 100 |
 | Total test sessions | 3,280 |
 | Malicious sessions | 117 |
 | Normal sessions | 3,163 |
-| Precision | 0.7452 |
+| Precision | 0.9435 |
 | Recall | 1.0000 |
-| F1 | 0.8540 |
-| PR-AUC | 0.9576 |
-| ROC-AUC | 0.9984 |
+| F1 | 0.9710 |
+| PR-AUC | 0.9932 |
+| ROC-AUC | 0.9999 |
 | Precision@top-1% | 1.0000 |
-| Precision@top-3% | 0.9388 |
+| Precision@top-3% | 1.0000 |
 | Precision@top-5% | 0.7134 |
 
 ## Tier Distribution (Test Flagged Sessions)
@@ -24,7 +24,7 @@
 | Tier | Count | Description |
 |------|-------|-------------|
 | 1 (Hard rules) | 99 | fp_mismatch / geo_velocity → 90–100 |
-| 2 (Graph-boosted) | 58 | lateral/relational evidence → 55–89 |
+| 2 (Graph-boosted) | 25 | lateral/relational evidence → 55–89 |
 | 3 (Model-driven) | 0 | IF + Transformer blend → 0–54 |
 
 ## Per-Attack-Type Recall
@@ -51,10 +51,10 @@
 | Metric | Value |
 |--------|-------|
 | Total insider_drift test sessions | 10 |
-| Flagged (FP) | 3 |
-| FPR | 0.3 |
-| Mean fused score | 25.9 |
-| Max fused score | 60 |
+| Flagged (FP) | 1 |
+| FPR | 0.1 |
+| Mean fused score | 33.0 |
+| Max fused score | 93 |
 
 ## Rule Classifier Accuracy
 

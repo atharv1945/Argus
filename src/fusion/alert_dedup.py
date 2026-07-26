@@ -44,7 +44,7 @@ from collections import Counter
 # Constants
 # ─────────────────────────────────────────────────────────────────────────────
 
-ALERT_THRESHOLD  = 50       # fused_risk_score >= this is an "alert"
+ALERT_THRESHOLD  = 90       # fused_risk_score >= this is an "alert"
 DEFAULT_WINDOW_H = 24       # default dedup window in hours
 
 
