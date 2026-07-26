@@ -22,6 +22,7 @@ from typing import List, Dict, Tuple
 import numpy as np
 import pandas as pd
 import yaml
+# pyrefly: ignore [missing-import]
 from faker import Faker
 
 # -----------------------------------------------------------------------------
