@@ -600,7 +600,7 @@ def chart_score_distribution(fused: pd.DataFrame, split: str = "test") -> alt.Ch
             x="score:Q",
             color=alt.Color("label:N",
                             scale=alt.Scale(domain=["Alert (50)", "Tier 1 (90)"],
-                                            range=[TIER2_COLOR, TIER1_COLOR]),
+                                            range=[TIER2_COLOR, "#8B5CF6"]), # Amber and Purple
                             title="Threshold"),
             tooltip=["label:N"],
         )
@@ -608,6 +608,7 @@ def chart_score_distribution(fused: pd.DataFrame, split: str = "test") -> alt.Ch
 
     return (
         (hist + lines)
+        .resolve_scale(color='independent')
         .properties(title="Fused Risk Score Distribution", height=220)
         .configure(**_ALT_CONFIG)
     )
